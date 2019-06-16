@@ -28,3 +28,8 @@ def fmt_uptime(delta):
     days, hours = divmod(hours, 24)
 
     return f"{days}d {hours}h {minutes}m {seconds}s"
+
+
+def chunks(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i + n]

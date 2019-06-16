@@ -3,7 +3,6 @@ import random
 
 import asyncpg
 import discord
-import more_itertools
 import re
 from discord.ext import commands, flags
 
@@ -109,7 +108,7 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         )
 
     async def generate_embeds(self, ctx, meme_list):
-        for meme in more_itertools.chunked(meme_list, 20):
+        for meme in utils.chunks(meme_list, 20):
             meme_embed = discord.Embed(color=discord.Color(0x008CFF))
             meme_embed.set_footer(text=f"Total Memes: {len(meme_list)}")
 
