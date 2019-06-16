@@ -1,0 +1,72 @@
+{
+  tokens: {
+    // Discord tokens
+    discord: {
+      // Main
+      takuru: "",
+      // Test
+      kurusu: ""
+    },
+    // API keys
+    apis: {
+      // https://developers.giphy.com
+      giphy: "",
+      // https://tenor.com/developer/dashboard
+      tenor: "",
+      // https://osu.ppy.sh/p/api
+      osu: "",
+      // https://thecatapi.com/signup
+      catapi: "",
+      // Somewhere
+      atom: "",
+      // Somewhere too
+      bitly: "",
+      // https://saucenao.com/user.php?page=search-api
+      saucenao: "",
+      pixiv: {
+        // Your pixiv email
+        username: "",
+        // Your pixiv password
+        password: "",
+        get_secure_url: 1,
+        // A Pixiv client id
+        client_id: "",
+        // A pixiv client secret
+        client_secret: "",
+        grant_type: "password"
+      },
+      // https://developers.google.com/custom-search/v1/overview
+      google_custom_search_api_keys: [
+        ""
+      ]
+    }
+  },
+  // Datavases
+  dbs: {
+    psql: {
+      port: 0000,
+      user: "",
+      host: "",
+      database: "",
+      password: ""
+    },
+    redis: {
+      password: "",
+      address: "redis://0.0.0.0:0000"
+    }
+  },
+  // Lavalink server config
+  wavelink: {
+    host: "",
+    port: 0000,
+    password: "",
+    rest_uri: "http://0.0.0.0:0000",
+    region: "",
+    identifier: "",
+    secure: false
+  },
+  // Array of guilds where markov logging and chaining is enabled
+  markov_guilds: [
+    0
+  ]
+}

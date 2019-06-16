@@ -1,0 +1,15 @@
+aiofiles
+aioredis
+async_cse
+asyncpg
+discord-flags
+discord.py[voice]
+git+https://github.com/EvieePy/Wavelink
+git+https://github.com/PendragonLore/async_pokepy
+jishaku
+lru_dict
+lxml
+more_itertools
+pillow
+uvloop
+wand
