@@ -65,7 +65,7 @@
     identifier: "",
     secure: false
   },
-  // Array of guilds where markov logging and chaining is enabled
+  // Array of guild ids where markov logging and chaining is enabled
   markov_guilds: [
     0
   ]

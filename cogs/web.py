@@ -215,31 +215,22 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
 
         Might not be up to date with the latest entries."""
         try:
-            pokemon = await ctx.bot.pokeapi.get_pokemon(name)
+            pokemon: async_pokepy.Pokemon = await ctx.bot.pokeapi.get_pokemon(name)
         except async_pokepy.PokeAPIException:
             return await ctx.send("No results.")
 
-        fmt_types = " and ".join(pokemon.types)
-
         embed = discord.Embed(color=discord.Color(0x008CFF))
-        embed.description = (
-            f"**Type(s)** {fmt_types} | **Weight**: {pokemon.weight / 10} kg | " f"**Height**: {pokemon.height * 10} cm"
-        )
-        embed.set_author(name=f"{pokemon.id} - {pokemon}", icon_url=self.pokeball)
-        stats = [
-            o + str(a)
-            for o, a in zip(
-                ("**HP**: ", "**Atk**: ", "**Def**: ", "**Sp. Atk**: ", "**Sp. Def**: ", "**Spd**: "), pokemon.stats
-            )
-        ]
-        embed.add_field(name="Stats", value="\n".join(stats))
+        embed.set_thumbnail(url=pokemon.sprites.front_default)
+        embed.set_author(name=f"{pokemon} - {pokemon.id}", icon_url=self.pokeball)
+        types = " and ".join([str(x.type) for x in pokemon.types])
 
-        embed.set_thumbnail(url=pokemon.sprites["front_default"].url)
+        embed.description = (f"{types} type\n"
+                             f"{pokemon.height / 10} meters tall and {pokemon.weight / 10} kilograms heavy\n"
+                             f"{len(pokemon.moves)} total moves")
 
-        embed.add_field(name="Abilities", value="\n".join(pokemon.abilities))
-        embed.add_field(name="Moves", value=", ".join(pokemon.moves[:15]) + "...")
-        if pokemon.held_items:
-            embed.add_field(name="Held Items", value=", ".join(pokemon.held_items))
+        embed.add_field(name="Stats", value="\n".join([f"{s.base_stat:>10} **{s.stat}**"
+                                                       for s in reversed(pokemon.stats)]))
+        embed.add_field(name="Abilities", value="\n".join(map(str, pokemon.abilities)) or "None :thinking:")
 
         await ctx.send(embed=embed)
 
@@ -250,20 +241,10 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
         Might not be up to date with the latest entries."""
         try:
             move = await ctx.bot.pokeapi.get_move(name)
-        except async_pokepy.PokeAPIException:
+        except async_pokepy.NotFound:
             return await ctx.send("No results.")
 
         embed = discord.Embed(color=discord.Color(0x008CFF))
-        embed.set_author(name=f"{move.id} - {move}", icon_url=self.pokeball)
-        embed.description = (
-            f"**Effect:** {', '.join(move.short_effect)}\n"
-            f"**Damage:** {move.power}\n"
-            f"**Damage Type:** {move.damage_class}\n"
-            f"**Target:** {move.target}\n"
-            f"**Elemental Type:** {move.type}\n"
-            f"**Power Points:** {move.pp}\n"
-            f"{f'**Effect Chance**: {move.effect_chance}%' if move.effect_chance else ''}"
-        )
 
         await ctx.send(embed=embed)
 
@@ -278,13 +259,6 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
             return await ctx.send("No results.")
 
         embed = discord.Embed(color=discord.Color(0x008CFF))
-        embed.set_author(name=f"{ability.id} - {ability.name}", icon_url=self.pokeball)
-        embed.description = (
-            f"**Effect:** {', '.join(ability.short_effect)}\n"
-            f"**Is from the main series?** {ability.is_main_series}\n"
-            f"**Generation:** {ability.generation}\n"
-            f"**Possessors:** {', '.join(ability.pokemon)}\n"
-        )
 
         await ctx.send(embed=embed)
 

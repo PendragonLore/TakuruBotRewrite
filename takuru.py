@@ -8,6 +8,7 @@ from datetime import datetime
 
 import aioredis
 import async_cse
+import async_pokepy
 import asyncpg
 import discord
 import wavelink
@@ -158,7 +159,7 @@ class TakuruBot(commands.Bot):
         self.db = await asyncpg.create_pool(**self.config.dbs["psql"], loop=self.loop)
         LOG.info("Connected to Postgres")
 
-        # self.pokeapi = await async_pokepy.Client.connect(loop=self.loop)
+        self.pokeapi = await async_pokepy.connect(loop=self.loop)
         self.ezr = await utils.EasyRequests.start(self)
         LOG.info("Finished setting up API stuff")
 
@@ -173,7 +174,7 @@ class TakuruBot(commands.Bot):
 
     async def close(self):
         await self.ezr.close()
-        # await self.pokeapi.close()
+        await self.pokeapi.close()
         await asyncio.wait_for(self.db.close(), timeout=20.0, loop=self.loop)
         self._redis.close()
         await self._redis.wait_closed()

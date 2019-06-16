@@ -2,7 +2,7 @@ aiofiles==0.4.0
 aiohttp==3.5.4
 aioredis==1.2.0
 async-cse==0.2.8
-async-pokepy==0.1.5a0
+git+https://github.com/PendragonLore/async_pokepy
 async-timeout==3.0.1
 asyncpg==0.18.3
 attrs==19.1.0

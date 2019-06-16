@@ -64,6 +64,3 @@ class Config:
 
     def __getattr__(self, item):
         return self.__getitem__(item)
-
-    def __delattr__(self, item):
-        return self.__delitem__(item)
