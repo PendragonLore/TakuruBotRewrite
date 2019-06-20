@@ -123,8 +123,8 @@ class Paginator:
         embed.set_author(name="Instructions")
 
         embed.description = (
-            "This is a reaction paginato,; when you react to one of the buttons below "
-            "the message gets edited. Below you will find what the reactions do."
+            "This is a reaction paginator, when you react to one of the buttons below "
+            "the message gets edited. Below you will find what each does."
         )
 
         for emoji, func in self.reactions:
