@@ -25,11 +25,11 @@ class Weeb(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
                    coverImage {color}}} description favourites}}""",
         }
 
-    @commands.command(name="osu")
+    @commands.command()
     @utils.requires_config("tokens", "apis", "osu")
     async def osu(self, ctx, user):
         """Get info on a osu! user."""
-        results = await ctx.get("https://osu.ppy.sh/api/get_user", k=ctx.bot.config.tokens["apis"]["osu"], u=user)
+        results = await ctx.get("https://osu.ppy.sh/api/get_user", k=ctx.bot.config.tokens.apis.osu, u=user)
         try:
             d = results[0]
         except (IndexError, ValueError, TypeError):
@@ -65,10 +65,13 @@ class Weeb(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         if data["isAdult"] and not ctx.channel.is_nsfw():
             raise commands.BadArgument(f"This {type_.lower()} is adult only, consider searching it in NSFW channel.")
 
-        c = data["coverImage"]["color"] or "#36393E"
+        try:
+            c = int(data["coverImage"]["color"].lstrip("#"), 16)
+        except (IndexError, KeyError, AttributeError, TypeError):
+            c = discord.Colour.from_hsv(random.random(), 1, 1)
 
         embed = discord.Embed(
-            title=f"`{data['id']}` - {data['title']['romaji']}", color=int(c.lstrip("#"), 16), url=data["siteUrl"]
+            title=f"`{data['id']}` - {data['title']['romaji']}", color=c, url=data["siteUrl"]
         )
         d = data["description"].replace("<br>", "")
         embed.description = utils.trunc_text(d, 2048)
@@ -83,7 +86,7 @@ class Weeb(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         if all(k for k in data.get("startDate", {}).values()):
             dates.append(f"Started on {utils.fmt_delta(datetime(**data['startDate']))}")
         if all(k for k in data.get("endDate", {}).values()):
-            dates.append(f"Started on {utils.fmt_delta(datetime(**data['endDate']))}")
+            dates.append(f"Ended on {utils.fmt_delta(datetime(**data['endDate']))}")
 
         embed.add_field(name="Dates", value="\n".join(dates) or "No dates available.")
 

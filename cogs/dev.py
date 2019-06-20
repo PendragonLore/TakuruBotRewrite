@@ -12,9 +12,9 @@ import discord
 from discord.ext import commands
 from lxml import etree
 
+from utils.checks import requires_config
 from utils.converters import Codeblock
 from utils.tio import Tio
-from utils.checks import requires_config
 
 try:
     import ujson as json
@@ -60,7 +60,7 @@ class DevUtils(commands.Cog, name="Dev Utils",
                command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, commands.BucketType.user))):
     """Utils for developers."""
 
-    TOKEN_REGEX = re.compile(r"[a-zA-Z0-9]{24}\.[a-zA-Z0-9\-_]{6}\.[a-zA-Z0-9_\-]{27}|mfa\.[a-zA-Z0-9_\-]{84}")
+    TOKEN_REGEX = re.compile(r"([a-zA-Z0-9]{24})\.([a-zA-Z0-9\-_]{6})\.([a-zA-Z0-9_\-]{27})")
 
     def __init__(self, bot):
         self.bot = bot
@@ -268,16 +268,13 @@ class DevUtils(commands.Cog, name="Dev Utils",
         response = await ctx.post("http://coliru.stacked-crooked.com/compile", __data=data)
         clean = await commands.clean_content(use_nicknames=False).convert(ctx, response)
 
-        try:
-            await ctx.send(f"```{clean or 'No output.'}```")
-        except discord.HTTPException:
-            await ctx.post_to_mystbin(clean)
+        await ctx.send(f"```{clean or 'No output.'}```")
 
     @commands.command(name="apm")
     @requires_config("tokens", "apis", "atom")
     async def apm(self, ctx, *, name):
         """Get an atom package's info."""
-        auth = (("Authorization", ctx.bot.config.tokens["apis"]["atom"]),)
+        auth = (("Authorization", ctx.bot.config.tokens.apis.atom),)
         package = await ctx.get(
             f"https://atom.io/api/packages/" f"{urlquote('-'.join(name.lower().split()), safe='')}", __headers=auth
         )
@@ -338,15 +335,14 @@ class DevUtils(commands.Cog, name="Dev Utils",
     @commands.command(name="parsetoken", aliases=["tokenparse"])
     async def parse_token(self, ctx, *, token):
         """Parse a Discord bot auth token."""
-        if not self.TOKEN_REGEX.match(token):
+        match = self.TOKEN_REGEX.fullmatch(token)
+        if not match or not match.group(0):
             return await ctx.send("Not a valid token.")
 
-        t = token.split(".")
-        if len(t) > 3 or len(t) < 3:
-            return await ctx.send("Not a valid token.")
+        enc_id, enc_time, hmac = match.groups()
 
         try:
-            id_ = base64.standard_b64decode(t[0]).decode("utf-8")
+            id_ = base64.standard_b64decode(enc_id).decode("utf-8")
             try:
                 user = await ctx.bot.fetch_user(int(id_))
             except discord.HTTPException:
@@ -356,7 +352,7 @@ class DevUtils(commands.Cog, name="Dev Utils",
 
         try:
             token_epoch = 1293840000
-            decoded = int.from_bytes(base64.standard_b64decode(t[1] + "=="), "big")
+            decoded = int.from_bytes(base64.standard_b64decode(enc_time + "=="), "big")
             timestamp = datetime.utcfromtimestamp(decoded)
             if timestamp.year < 2015:  # Usually if the year is less then 2015 it means that we must add the token epoch
                 timestamp = datetime.utcfromtimestamp(decoded + token_epoch)
@@ -367,7 +363,7 @@ class DevUtils(commands.Cog, name="Dev Utils",
         fmt = (
             f"**Valid token.**\n\n**ID**: {id_}\n"
             f"**Created at**: {date}\n**Associated bot**: {user or '*Was not able to fetch it*.'}"
-            f"\n**Cryptographic component**: {t[2]}"
+            f"\n**Cryptographic component**: {hmac}"
         )
 
         await ctx.send(fmt)

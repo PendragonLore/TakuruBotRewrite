@@ -1,9 +1,9 @@
 import asyncio
 import random
+import re
 
 import asyncpg
 import discord
-import re
 from discord.ext import commands, flags
 
 import utils
@@ -122,46 +122,49 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
 
         await ctx.paginate()
 
-    async def round_search(self, ctx, name):
+    async def round_search(self, ctx, name, *, limit=15):
+        sql = f"""
+        SELECT name
+        FROM memes
+        WHERE guild_id = $1
+        AND name % $2
+        ORDER BY similarity(NAME, $2) DESC, name ASC
+        LIMIT {limit};
+        """
+
         async with ctx.db.acquire() as db:
-            sql = """
-            SELECT   name
-            FROM     memes
-            WHERE    guild_id = $1 AND
-                     name % $2
-            ORDER BY similarity(NAME, $2) DESC, name ASC 
-            LIMIT 15;
-            """
+            async with db.transaction():
+                results = [result["name"] async for result in db.cursor(sql, ctx.guild.id, name)]
 
-            search = await db.fetch(sql, ctx.guild.id, name)
-
-        results = [result["name"] for result in search]
-
+        if not results:
+            raise commands.BadArgument("No results.")
         return results
 
     async def get_meme(self, ctx, name, *, raw=False):
         async with ctx.db.acquire() as db:
-            sql = """SELECT content
-                        FROM memes
-                        WHERE guild_id = $1
-                        AND name = $2;"""
+            sql = """
+            SELECT content
+            FROM memes
+            WHERE guild_id = $1
+            AND name = $2;
+            """
 
             meme = await db.fetchval(sql, ctx.guild.id, name)
 
         if not meme:
-            results = await self.round_search(ctx, name)
+            results = await self.round_search(ctx, name, limit=5)
 
-            if not results:
-                return await ctx.send("Meme not found.")
-
-            results = "\n".join(results[:5])
+            results = "\n".join(results)
 
             return await ctx.send(f"Meme not found. Did you mean...\n{results}")
 
         async with ctx.db.acquire() as db:
-            update = """UPDATE memes
-                          SET count = count + 1
-                          WHERE name = $1 AND guild_id = $2;"""
+            update = """
+            UPDATE memes
+            SET count = count + 1
+            WHERE name = $1
+            AND guild_id = $2;
+            """
 
             await db.execute(update, name, ctx.guild.id)
 
@@ -205,10 +208,12 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
 
         The original owner must have left the guild."""
         async with ctx.db.acquire() as db:
-            sql = """SELECT owner_id
-                        FROM memes
-                        WHERE name = $1
-                        AND guild_id = $2"""
+            sql = """
+            SELECT owner_id
+            FROM memes
+            WHERE name = $1
+            AND guild_id = $2;
+            """
 
             check = await db.fetchval(sql, meme, ctx.guild.id)
 
@@ -227,10 +232,12 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
             return await ctx.send("The owner is still in the guild.")
 
         async with ctx.db.acquire() as db:
-            sql = """UPDATE memes
-                        SET owner_id = $1
-                        WHERE name = $2
-                        AND guild_id = $3;"""
+            sql = """
+            UPDATE memes
+            SET owner_id = $1
+            WHERE name = $2
+            AND guild_id = $3;
+            """
 
             await db.execute(sql, ctx.author.id, meme, ctx.guild.id)
 
@@ -245,10 +252,9 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
 
         If with the URL the meme's content becomes too big it will be discarded."""
         async with ctx.db.acquire() as db:
-            sql = """INSERT INTO memes
-                        (guild_id, name, content, owner_id)
-                        VALUES
-                        ($1, $2, $3, $4);"""
+            sql = """
+            INSERT INTO memes (guild_id, name, content, owner_id)
+            VALUES ($1, $2, $3, $4);"""
 
             try:
                 await db.execute(sql, ctx.guild.id, name, content, ctx.author.id)
@@ -260,12 +266,14 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
     @meme.command(name="list", aliases=["lis"])
     async def meme_list(self, ctx):
         """Get a list of all the guild's memes."""
-        async with ctx.db.acquire() as db:
-            sql = """SELECT name
-                        FROM memes
-                        WHERE guild_id=$1
-                        ORDER BY name ASC;"""
+        sql = """
+        SELECT name
+        FROM memes
+        WHERE guild_id = $1
+        ORDER BY name ASC;
+        """
 
+        async with ctx.db.acquire() as db:
             memes = await db.fetch(sql, ctx.guild.id)
 
         if not memes:
@@ -281,9 +289,9 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         async with ctx.db.acquire() as db:
             sql = """
             DELETE FROM memes
-            WHERE  guild_id = $1 AND
-                   name = $2 AND
-                   owner_id = $3;
+            WHERE guild_id = $1
+            AND name = $2
+            AND owner_id = $3;
             """
 
             deleted = await db.execute(sql, ctx.guild.id, name, ctx.author.id)
@@ -301,10 +309,7 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         if len(name) < 3:
             raise commands.BadArgument("Query must be at least 3 characters.")
 
-        results = await self.round_search(ctx, name)
-
-        if not results:
-            return await ctx.send("Search returned nothing.")
+        results = await self.round_search(ctx, name, limit="NULL")
 
         memes = [f"{index}. {meme}" for index, meme in enumerate(results, 1)]
 
@@ -318,10 +323,10 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         async with ctx.db.acquire() as db:
             sql = """
             UPDATE memes
-            SET    content = $1
-            WHERE  guild_id = $2 AND
-                   name = $3 AND
-                   owner_id = $4;
+            SET content = $1
+            WHERE guild_id = $2
+            AND name = $3
+            AND owner_id = $4;
             """
 
             edited = await db.execute(sql, new_content, ctx.guild.id, name, ctx.author.id)
@@ -339,9 +344,9 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         async with ctx.db.acquire() as db:
             sql = """
             SELECT *
-            FROM   memes
-            WHERE  guild_id = $1 AND
-                   name = $2;
+            FROM memes
+            WHERE guild_id = $1
+            AND name = $2;
             """
 
             data = await db.fetchrow(sql, ctx.guild.id, name)
@@ -371,10 +376,10 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         async with ctx.db.acquire() as db:
             sql = """
             SELECT NAME
-            FROM   memes
-            WHERE  owner_id = $1 AND 
-                   guild_id = $2
-            ORDER  BY name ASC;
+            FROM memes
+            WHERE owner_id = $1
+            AND guild_id = $2
+            ORDER BY name ASC;
             """
 
             results = await db.fetch(sql, member.id, ctx.guild.id)
@@ -395,10 +400,10 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         async with ctx.db.acquire() as db:
             sql = """
             SELECT owner_id
-            FROM   memes
-            WHERE  guild_id = $1 AND
-                   name = $2     AND
-                   owner_id = $3;
+            FROM memes
+            WHERE guild_id = $1 
+            AND name = $2
+            AND owner_id = $3;
             """
 
             check = await db.fetchrow(sql, ctx.guild.id, name, ctx.author.id)
@@ -409,9 +414,9 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         async with ctx.db.acquire() as db:
             sql = """
             UPDATE memes
-            SET    owner_id = $1
-            WHERE  name = $2 AND
-                   guild_id = $3;
+            SET owner_id = $1
+            WHERE name = $2 
+            AND guild_id = $3;
             """
 
             await db.execute(sql, recipient.id, name, ctx.guild.id)
@@ -425,12 +430,11 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         The number of uses will not be increased."""
         async with ctx.db.acquire() as db:
             sql = """
-            SELECT name,
-                   content
-            FROM   memes
-            WHERE  guild_id = $1
-            ORDER  BY Random()
-            LIMIT  1;
+            SELECT name, content
+            FROM memes
+            WHERE guild_id = $1
+            ORDER BY Random()
+            LIMIT 1;
             """
 
             data = await db.fetchrow(sql, ctx.guild.id)

@@ -1,4 +1,5 @@
 import asyncio
+import functools
 
 import discord
 from discord.ext import commands
@@ -31,6 +32,12 @@ class Paginator:
         self.channel = ctx.channel
         self.msg = ctx.message
 
+        perms = self.channel.permissions_for(self.ctx.me)
+        missing = [perm for perm, value in perms
+                   if perm in {"add_reaction", "embed_links", "read_message_history"} and not value]
+        if missing:
+            raise commands.BotMissingPermissions(missing)
+
         self.execute = None
         self.entries = []
         self.embed = embed
@@ -40,7 +47,7 @@ class Paginator:
         self.reactions = [
             ("\N{BLACK LEFT-POINTING TRIANGLE}", self.backward),
             ("\N{BLACK RIGHT-POINTING TRIANGLE}", self.forward),
-            ("\N{BLACK SQUARE FOR STOP}", self.stop),
+            ("\N{BLACK SQUARE FOR STOP}", functools.partial(self.stop, delete=True)),
             ("\N{INFORMATION SOURCE}", self.info),
         ]
 
@@ -97,12 +104,15 @@ class Paginator:
             self.current += 1
             await self.alter(self.current)
 
-    async def stop(self):
+    async def stop(self, *, delete=False):
         """stops the paginator session."""
         try:
-            await self.msg.clear_reactions()
-        except discord.Forbidden:
-            await self.msg.delete()
+            if delete:
+                await self.msg.delete()
+            else:
+                await self.msg.clear_reactions()
+        except discord.HTTPException:
+            pass
         finally:
             self.paginating = False
 
@@ -113,7 +123,7 @@ class Paginator:
         embed.set_author(name="Instructions")
 
         embed.description = (
-            "This is a reaction paginator; when you react to one of the buttons below "
+            "This is a reaction paginato,; when you react to one of the buttons below "
             "the message gets edited. Below you will find what the reactions do."
         )
 
@@ -141,16 +151,19 @@ class Paginator:
         while self.paginating:
             done, pending = await asyncio.wait(
                 [
-                    self.bot.wait_for("reaction_add", check=self.check, timeout=120),
-                    self.bot.wait_for("reaction_remove", check=self.check, timeout=120),
+                    self.bot.wait_for("reaction_add", check=self.check),
+                    self.bot.wait_for("reaction_remove", check=self.check),
                 ],
-                return_when=asyncio.FIRST_COMPLETED,
+                return_when=asyncio.FIRST_COMPLETED, timeout=120
             )
 
             try:
-                done.pop().result()
-            except Exception:
+                exc = done.pop().exception()
+            except KeyError:
                 return await self.stop()
+            else:
+                if isinstance(exc, (discord.HTTPException, asyncio.TimeoutError)):
+                    return await self.stop()
 
             for future in pending:
                 future.cancel()

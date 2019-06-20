@@ -6,14 +6,14 @@ import os
 import platform
 import time
 import typing
-import psutil
 from collections import Counter
 from datetime import datetime
 
 import discord
 import humanize
+import psutil
 from discord.ext import commands, flags
-from jishaku.paginators import WrappedPaginator, PaginatorInterface
+from jishaku.paginators import PaginatorInterface, WrappedPaginator
 
 import utils
 
@@ -164,13 +164,12 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
     async def about(self, ctx):
         """Get some basic info about the bot."""
         invite = discord.utils.oauth_url(ctx.bot.user.id, permissions=discord.Permissions(37055814))
-        owner = ctx.bot.get_user(ctx.bot.owner_id)
 
         member_status = Counter(str(m.status) for m in ctx.bot.get_all_members())
         channels = Counter(str(m.__class__.__name__) for m in ctx.bot.get_all_channels())
 
         embed = discord.Embed(title="About", color=discord.Color(0x008CFF))
-        embed.description = "A silly multi purpose bot."
+        embed.description = "A silly multi purpose bot. Testing version of Takuru#7838"
 
         embed.add_field(name="Members", value=(f"{utils.ONLINE} {member_status['online']}"
                                                f"{utils.IDLE} {member_status['idle']}\n"
@@ -181,9 +180,9 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
         embed.add_field(name="Guilds", value=str(len(ctx.bot.guilds)))
         embed.add_field(name="Uptime", value=utils.fmt_uptime(ctx.bot.uptime))
         embed.add_field(name="Useful links", value=(f"[Invite]({invite}) | [Support](https://discord.gg/tH92pwF) | "
-                                                    f"[Source](https://github.com/PendragonLore/TakuruBotRewrit)"),
+                                                    f"[Source](https://github.com/PendragonLore/TakuruBotRewrite)"),
                         inline=False)
-        embed.set_footer(text=f"Smh wrong siders. | Made by {owner}", icon_url=ctx.bot.user.avatar_url)
+        embed.set_footer(text=f"Smh wrong siders. | Made by {ctx.bot.owner}", icon_url=ctx.bot.user.avatar_url)
 
         await ctx.send(embed=embed)
 
@@ -218,7 +217,7 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
             embed.add_field(name="Process info", value=(f"`{proc.name()}` ({proc.pid} PID) "
                                                         f"with {proc.num_threads()} threads\n"
                                                         f"Using {nat(mem.rss)} physical memory and "
-                                                        f"{nat(mem.vms)} virtual memory"))
+                                                        f"{nat(mem.vms)} virtual memory ({nat(mem.uss)} unique)"))
 
         pool = ctx.db
         embed.add_field(name="Database pool info", value=(f"Total `Pool.acquire` waiters: {len(pool._queue._getters)}\n"
@@ -350,7 +349,7 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
             "https://api-ssl.bitly.com/v4/shorten",
             __data=data,
             __headers=(("Content-Type", "application/json"),
-                       ("Authorization", ctx.bot.config.tokens["apis"]["bitly"])),
+                       ("Authorization", ctx.bot.config.tokens.apis.bitly)),
         )
 
         if len(r["link"]) > len(url):
@@ -438,14 +437,14 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
 
         A prefix can't be longer then 32 characters.
         You must also either be the guild's owner or have the manage guild permission."""
-        if len(prefix.strip()) > 32:
+        if len(prefix) > 32:
             raise commands.BadArgument("Prefix length can be 32 at maximum.")
 
         async with ctx.db.acquire() as db:
             sql = """
             INSERT INTO prefixes (guild_id, prefix) 
             VALUES ($1, $2) 
-            ON CONFLICT (guild_id, prefix) DO 
+            ON CONFLICT (guild_id) DO 
             UPDATE SET prefix = $2;
             """
             await db.execute(sql, ctx.guild.id, prefix)
@@ -474,6 +473,14 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
         del ctx.bot.prefix_dict[ctx.guild.id]
 
         await ctx.send(f"Custom prefix {ret!r} removed.")
+
+    @commands.command()
+    async def test_date(self, ctx, *,
+                        argument: utils.HumanTime(
+                            arg_required=True, past_ok=True, converter=commands.MemberConverter(), greedy=True,
+                            default=None
+                        )):
+        await ctx.send(f"Date: {argument.date} Arg: {argument.arg}")
 
 
 def setup(bot):

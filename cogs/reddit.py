@@ -9,11 +9,6 @@ from discord.ext import commands
 
 import utils
 
-try:
-    import ujson as json
-except ImportError:
-    import json
-
 
 class PostType(discord.Enum):
     TEXT = 0
@@ -89,6 +84,8 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         self.user_agent = "Python:TakuruBot:0.1 (by u/Pendragon_Lore)"
         self.headers = {"User-Agent": self.user_agent}
 
+        self._post_cache = {}
+
     @commands.group(name="reddit", aliases=["r"], invoke_without_command=True, case_insensitive=True)
     async def reddit(self, ctx):
         await ctx.send_help(ctx.command)
@@ -112,7 +109,7 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         await self.embed_post(ctx, data)
 
     @reddit.command(name="subsort", aliases=["ss"])
-    async def subreddit_search_sorted(self, ctx, subreddit, sort_type: lambda x: x.lower()):
+    async def subreddit_search_sorted(self, ctx, subreddit, sort_type: lambda x: x.lower()="hot"):
         """Get a random post from a subreddit.
 
         You can optionally sort by `hot`, `new`, `rising`, `top` or `controversial`.

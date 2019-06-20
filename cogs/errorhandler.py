@@ -72,14 +72,13 @@ class CommandHandler(commands.Cog):
 
             stack = 8
             traceback_text = traceback.format_exception(type(error), error, error.__traceback__, stack)
-            owner = ctx.bot.get_user(ctx.bot.owner_id)
             paginator = commands.Paginator(prefix="```py", suffix="```", max_size=1990)
 
             for page in traceback_text:
                 paginator.add_line(page.lstrip(" \n"))
 
             for page in paginator.pages:
-                await owner.send(page)
+                await ctx.bot.owner.send(page)
 
         # await ctx.send(f"An uncaught error occured in {ctx.command}")
 

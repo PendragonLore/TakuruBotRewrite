@@ -52,10 +52,13 @@ class EasyRequests:
         async with self.lock:
             check = self.cache.get(self.fmt_cache(__method, __url, params), None)
             if check and cache:
+                LOG.debug("%s %s Got %s from cache", __method, __url, check)
                 return check
 
-            kwargs = {k.strip("_"): v for k, v in params.items() if k.startswith("__")}
-            for key in list(params.keys()):
+            kwargs = {k.lstrip("_"): v for k, v in params.items() if k.startswith("__")}
+            cache_params = params.copy()
+
+            for key in cache_params.keys():
                 if key.startswith("__"):
                     del params[key]
 
@@ -74,7 +77,8 @@ class EasyRequests:
                 if 300 > r.status >= 200 or __url == "https://www.zerochan.net/search":
                     LOG.info("%s succeeded", request_fmt)
                     if cache:
-                        self.cache[self.fmt_cache(__method, __url, params)] = data
+                        self.cache[self.fmt_cache(__method, __url, cache_params)] = data
+                        LOG.debug("%s Inserted data into cache", request_fmt)
                     return data
 
                 if r.status == 429:

@@ -1,5 +1,5 @@
-import operator
 import functools
+import operator
 
 from discord.ext import commands
 
@@ -45,7 +45,12 @@ def is_guild_owner_or_perms(**perms):
 
 def requires_config(*args):
     def predicate(ctx):
-        if not functools.reduce(operator.getitem, args, ctx.bot.config):
+        try:
+            k = functools.reduce(operator.getitem, args, ctx.bot.config)
+        except KeyError:
+            raise commands.BadArgument("Command cannot be used due to the lack of a config entry.")
+
+        if not k:
             raise commands.BadArgument("Command cannot be used due to the lack of a config entry.")
         return True
 

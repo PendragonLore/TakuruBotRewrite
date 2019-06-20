@@ -1,8 +1,8 @@
 import humanize
 
 from .checks import *  # noqa: F401
-from .converters import *  # noqa: F401
 from .config import Config  # noqa: F401
+from .converters import *  # noqa: F401
 from .defaults import *  # noqa: F401
 from .emotes import *  # noqa: F401
 from .ezrequests import EasyRequests  # noqa: F401

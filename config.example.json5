@@ -44,7 +44,7 @@
   // Datavases
   dbs: {
     psql: {
-      port: 0000,
+      port: 0,
       user: "",
       host: "",
       database: "",
@@ -58,7 +58,7 @@
   // Lavalink server config
   wavelink: {
     host: "",
-    port: 0000,
+    port: 0,
     password: "",
     rest_uri: "http://0.0.0.0:0000",
     region: "",

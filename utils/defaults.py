@@ -1,4 +1,4 @@
-from discord.ext import flags, commands
+from discord.ext import commands, flags
 
 
 class Author(flags.ParamDefault):

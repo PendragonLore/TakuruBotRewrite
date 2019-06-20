@@ -2,8 +2,8 @@ import random
 from typing import Optional
 
 import discord
+import numpy
 from discord.ext import commands
-from numpy.random import choice
 
 import utils
 from utils.emotes import BACKWARDS, FORWARD, POPULAR
@@ -36,7 +36,7 @@ class FunStuff(commands.Cog, name="Fun",
         if amount > 100:
             return await ctx.send("You can only get up to 100 cat pics at a time.")
 
-        headers = (("x-api-key", ctx.bot.config.tokens["apis"]["catapi"]),)
+        headers = (("x-api-key", ctx.bot.config.tokens.apis.catapi),)
 
         cats = await ctx.get("https://api.thecatapi.com/v1/images/search", limit=amount, __headers=headers)
 
@@ -73,18 +73,39 @@ class FunStuff(commands.Cog, name="Fun",
 
         random.seed(utils.make_seed(question))
         await ctx.send(
-            f"**Question**: {question}\nAll signs point to "
-            f"{FORWARD} **{random.choice(possible_responses)}** {BACKWARDS}"
+            f"**Question**: {question}\nAll signs point to\n\n"
+            f"{FORWARD} **{random.choice(possible_responses):^14}** {BACKWARDS}"
         )
 
-    @commands.command(name="owoify")
+    @commands.command()
+    async def choose(self, ctx, *choices):
+        """Make the bot choose something."""
+        if not choices or not all(s.strip() for s in choices):
+            return await ctx.send("Not enough choices or some are empty.")
+
+        await ctx.send(random.choice(choices))
+
+    @commands.command()
+    async def rate(self, ctx, *, thing: commands.clean_content):
+        random.seed(utils.make_seed(thing))
+
+        await ctx.send(f"I rate `{thing}` a **{random.randint(0, 10)} out of 10**.")
+
+    @commands.command()
     async def owoify(self, ctx, *, text: commands.clean_content):
         """Owoify some text ~~*send help*~~."""
-        owo_chars = ["w", "u", "owo", "uwu", "ww", "n", "nya"]
-        owod = "".join(choice([x, random.choice(owo_chars)], replace=True, p=[0.80, 0.20]) for x in text)
+        owo_chars = ["w", "u", "owo", "uwu", "nya"]
+        chars = []
+        for x in text:
+            if not x.strip():
+                chars.append(x)
+            else:
+                chars.append(numpy.random.choice([x, random.choice(owo_chars)], replace=True,
+                                                 p=[0.85, 0.15]))
+        owod = "".join(chars)
         await ctx.send(owod)
 
-    @commands.command(name="mock")
+    @commands.command()
     async def mock(self, ctx, *, text: commands.clean_content):
         """Mock text."""
         mocked = "".join(random.choice([m.upper(), m.lower()]) for m in text)

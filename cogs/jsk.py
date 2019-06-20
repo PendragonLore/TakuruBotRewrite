@@ -70,7 +70,7 @@ class Jishaku(cog.Jishaku):
     async def jsk_redis(self, ctx, *args):
         """Run a redis command."""
         try:
-            ret = await ctx.bot.redis(*args)
+            ret = await ctx.bot.redis.execute(*args)
             await ctx.send(ret)
         except Exception as exc:
             await ctx.add_reaction(ARI_DERP)

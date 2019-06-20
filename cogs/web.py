@@ -42,7 +42,7 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
         await ctx.trigger_typing()
         to_send = []
 
-        key = ctx.bot.config.tokens["apis"]["giphy"]
+        key = ctx.bot.config.tokens.apis.giphy
         data = (
             await ctx.get("https://api.giphy.com/v1/gifs/search", q=gif, api_key=key, limit=5)
         )["data"]
@@ -65,7 +65,7 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
         to_send = []
 
         if not self.anon_id:
-            key = ctx.bot.config.tokens["apis"]["tenor"]
+            key = ctx.bot.config.tokens.apis.tenor
             self.anon_id = (await ctx.get("https://api.tenor.com/v1/anonid", key=key))["anon_id"]
 
         resp = await ctx.get("https://api.tenor.com/v1/search", q=gif, anon_id=self.anon_id, limit=5, cache=True)
@@ -167,6 +167,7 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
             raise commands.BadArgument("No results.")
 
     @google.command(name="s", aliases=["search"])
+    @utils.requires_config("tokens", "apis", "google_custom_search_api_keys")
     async def google_search(self, ctx, *, query: commands.clean_content):
         """Just g o o g l e it.
 
@@ -183,6 +184,7 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
         await ctx.send(embed=embed)
 
     @google.command(name="image", aliases=["i"])
+    @utils.requires_config("tokens", "apis", "google_custom_search_api_keys")
     async def google_image_search(self, ctx, *, query: commands.clean_content):
         """Get an image from google image.
 
@@ -216,7 +218,7 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
         Might not be up to date with the latest entries."""
         try:
             pokemon: async_pokepy.Pokemon = await ctx.bot.pokeapi.get_pokemon(name)
-        except async_pokepy.PokeAPIException:
+        except async_pokepy.NotFound:
             return await ctx.send("No results.")
 
         embed = discord.Embed(color=discord.Color(0x008CFF))
@@ -234,33 +236,17 @@ class API(commands.Cog, name="API", command_attrs=dict(cooldown=commands.Cooldow
 
         await ctx.send(embed=embed)
 
-    @commands.command(name="pkmove", aliases=["pokemove"])
+    @commands.command(name="pkmove", aliases=["pokemove"], enabled=False)
     async def pokemon_move(self, ctx, *, name):
         """Get info on a Pokemon move.
 
         Might not be up to date with the latest entries."""
-        try:
-            move = await ctx.bot.pokeapi.get_move(name)
-        except async_pokepy.NotFound:
-            return await ctx.send("No results.")
 
-        embed = discord.Embed(color=discord.Color(0x008CFF))
-
-        await ctx.send(embed=embed)
-
-    @commands.command(name="pkability", aliases=["pkab", "pokeability"])
+    @commands.command(name="pkability", aliases=["pkab", "pokeability"], enabled=False)
     async def pokemon_ability(self, ctx, *, name):
         """Get info on a Pokemon ability.
 
         Might not be up to date with the latest entries."""
-        try:
-            ability: async_pokepy.Ability = await ctx.bot.pokeapi.get_ability(name)
-        except async_pokepy.PokeAPIException:
-            return await ctx.send("No results.")
-
-        embed = discord.Embed(color=discord.Color(0x008CFF))
-
-        await ctx.send(embed=embed)
 
 
 def setup(bot):

@@ -3,6 +3,7 @@ import itertools
 import logging
 import os
 import pathlib
+import re
 from collections import Counter
 from datetime import datetime
 
@@ -12,7 +13,7 @@ import async_pokepy
 import asyncpg
 import discord
 import wavelink
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 import utils
 
@@ -30,9 +31,12 @@ class RightSiderContext(commands.Context):
         return self.bot.db
 
     async def send(self, content=None, **kwargs):
-        content = content or ""
-        if len(content) > 1991 or content.count("\n") > 40:
-            return await self.post_to_mystbin(content, "Content was too long so I put it here:")
+        if not isinstance(content, (type(None), str)):
+            raise ValueError(f"Content must be str or NoneType not {type(content)}.")
+
+        ex = content or ""
+        if len(ex) > 1991 or ex.count("\n") > 40 and not self.invoked_with == "py":
+            return await self.post_to_mystbin(ex, "Content was too long so I put it here:")
 
         return await super().send(content, **kwargs)
 
@@ -78,20 +82,24 @@ class TakuruBot(commands.Bot):
 
         self.prefix_dict = {}
         self.gateway_messages = Counter()
+        self.owner = None
 
         self.http_headers = {"User-Agent": "Python/aiohttp"}
 
         self.init_cogs = [f"cogs.{ext.stem}" for ext in pathlib.Path("cogs/").glob("*.py")]
 
         self.db = None
-        self._redis = None
+        self.redis = None
         self.ezr = None
         self.pokeapi = None
-        self.google_api_keys = itertools.cycle(config.tokens["apis"]["google_custom_search_api_keys"])
-        self.google = async_cse.Search(api_key=next(self.google_api_keys))
+        try:
+            self.google_api_keys = itertools.cycle(config.tokens.apis.google_custom_search_api_keys)
+            self.google = async_cse.Search(api_key=next(self.google_api_keys))
+        except IndexError:
+            LOG.warning("No google API keys present.")
 
         self.add_check(self.global_check)
-        self.loop.create_task(self.load_init_cogs())
+        self.load_init_cogs.start()
 
     @property
     def python_lines(self):
@@ -124,7 +132,16 @@ class TakuruBot(commands.Bot):
 
         return True
 
+    async def create_timer(self, name_, **kwargs):
+        time = kwargs.pop("__time")
+        key_fmt = ":".join(f"{key}={value}" for key, value in kwargs.items())
+
+        ret = await self.redis.set(f"timer-name={name_}:{key_fmt}", 0, expire=int(time))
+        return ret, key_fmt
+
     async def on_ready(self):
+        self.owner = self.get_user(self.owner_id)
+
         LOG.info("Bot successfully booted up.")
         LOG.info("Total guilds: %s users: %s", len(self.guilds), len(self.users))
 
@@ -150,23 +167,23 @@ class TakuruBot(commands.Bot):
         LOG.info("Removed from guild %s with %s members, owner: %s", guild, guild.member_count, guild.owner)
 
     async def login(self, *args, **kwargs):
-        self._redis = await asyncio.wait_for(
-            aioredis.create_pool(**self.config.dbs["redis"], loop=self.loop, encoding="utf-8"),
+        self.redis = await asyncio.wait_for(
+            aioredis.create_redis_pool(**self.config.dbs.redis, loop=self.loop, encoding="utf-8"),
             timeout=20.0, loop=self.loop
         )
 
         LOG.info("Connected to Redis")
-        self.db = await asyncpg.create_pool(**self.config.dbs["psql"], loop=self.loop)
+        self.db = await asyncpg.create_pool(**self.config.dbs.psql, loop=self.loop)
         LOG.info("Connected to Postgres")
 
         self.pokeapi = await async_pokepy.connect(loop=self.loop)
         self.ezr = await utils.EasyRequests.start(self)
         LOG.info("Finished setting up API stuff")
 
-        data = await self.db.fetch("SELECT * FROM prefixes;")
-
-        for d in data:
-            self.prefix_dict[d["guild_id"]] = d["prefix"]
+        async with self.db.acquire() as db:
+            async with db.transaction():
+                async for d in db.cursor("SELECT * FROM prefixes;"):
+                    self.prefix_dict[d["guild_id"]] = d["prefix"]
 
         LOG.debug("Done fetching and inserting prefixes %s", self.prefix_dict)
 
@@ -176,11 +193,12 @@ class TakuruBot(commands.Bot):
         await self.ezr.close()
         await self.pokeapi.close()
         await asyncio.wait_for(self.db.close(), timeout=20.0, loop=self.loop)
-        self._redis.close()
-        await self._redis.wait_closed()
+        self.redis.close()
+        await self.redis.wait_closed()
 
         await super().close()
 
+    @tasks.loop(count=1)
     async def load_init_cogs(self):
         await self.wait_until_ready()
         LOG.info("Loading cogs...")
@@ -191,30 +209,34 @@ class TakuruBot(commands.Bot):
             except Exception as exc:
                 LOG.exception("Failed to load %s [%s: %s]", cog, type(exc).__name__, exc)
 
-    async def redis(self, *args, **kwargs):
-        try:
-            return await self._redis.execute(*args, **kwargs)
-        except aioredis.errors.PoolClosedError:
-            return
+
+class PresenceUpdateFilter(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        if "{'t': 'PRESENCE_UPDATE'" in msg:
+            return False
+        if re.match("Dispatching event (socket_raw_receive|member_update|socket_response)", msg):
+            return False
+
+        return True
 
 
 if __name__ == "__main__":
     INIT_TIME = datetime.utcnow()
 
     LOG = logging.getLogger("takuru")
-    LOG.setLevel(logging.DEBUG)
 
     fmt = logging.Formatter("{asctime} | {levelname: <8} | {module}:{funcName}:{lineno} - {message}",
                             datefmt="%Y-%m-%d %H:%M:%S", style="{")
     stream = logging.StreamHandler()
     stream.setFormatter(fmt)
+    stream.addFilter(PresenceUpdateFilter())
 
     files = logging.FileHandler(filename=f"pokecom/takuru{INIT_TIME}.log", mode="w", encoding="utf-8")
     files.setFormatter(fmt)
+    files.addFilter(PresenceUpdateFilter())
 
-    LOG.handlers = [files, stream]
-
-    for name in ["utils.ezrequests"]:
+    for name in ["utils.ezrequests", "cogs.nsfw", "discord", "takuru", "cogs.moderator"]:
         k = logging.getLogger(name)
         k.setLevel(logging.DEBUG)
         k.handlers = [files, stream]
@@ -222,10 +244,4 @@ if __name__ == "__main__":
     bot = TakuruBot()
     bot.loop.set_debug(True)
 
-    try:
-        bot.loop.run_until_complete(bot.start(bot.config.tokens["discord"]["kurusu"]))
-    except KeyboardInterrupt:
-        bot.loop.run_until_complete(bot.close())
-    finally:
-        bot.loop.close()
-        LOG.info("Bot shut down.")
+    bot.run(bot.config.tokens.discord.kurusu)

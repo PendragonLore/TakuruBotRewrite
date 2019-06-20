@@ -1,4 +1,5 @@
 import io
+import logging
 import random
 import typing
 from datetime import datetime, timedelta
@@ -9,6 +10,10 @@ import discord
 import lxml.etree as etree
 from discord.ext import commands, tasks
 
+import utils
+
+LOG = logging.getLogger("cogs.nsfw")
+
 
 class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, commands.BucketType.user))):
     """Commands that can only be used in NSFW channels."""
@@ -18,12 +23,17 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         self.mrm_url = "https://myreadingmanga.info/"
         self.token = None
 
-        self.pixiv_token.start()
+        try:
+            self.pixiv_data = self.bot.config.tokens.apis.pixiv
+        except KeyError:
+            LOG.debug("No pixiv data provided")
+        else:
+            self.pixiv_token.start()
 
     @tasks.loop(hours=1)
     async def pixiv_token(self):
         data = await self.bot.ezr.request(
-            "POST", "https://oauth.secure.pixiv.net/auth/token", __data=self.bot.config.tokens["apis"]["pixiv"]
+            "POST", "https://oauth.secure.pixiv.net/auth/token", __data=self.pixiv_data
         )
 
         auth = data["response"]["token_type"].capitalize() + " " + data["response"]["access_token"]
@@ -34,6 +44,7 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         await self.bot.wait_until_ready()
 
     @commands.command(name="pixiv")
+    @utils.requires_config("tokens", "apis", "pixiv")
     async def pixiv(self, ctx, *, query):
         await ctx.trigger_typing()
         data = await ctx.get(
@@ -184,6 +195,7 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         await ctx.paginate()
 
     @commands.command(name="sauce", aliases=["saucenao"])
+    @utils.requires_config("tokens", "apis", "saucenao")
     async def saucenao(self, ctx, *, url: typing.Optional[lambda x: x.strip("<>")]=None):
         """Get the sauce of an image."""
         try:
@@ -203,7 +215,7 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
                 output_type=2,
                 numres=5,
                 url=url,
-                api_key=ctx.bot.config.tokens["apis"]["saucenao"],
+                api_key=ctx.bot.config.tokens.apis.saucenao,
             )
         except Exception as e:
             raise e
