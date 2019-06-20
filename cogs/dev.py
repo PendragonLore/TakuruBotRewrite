@@ -231,6 +231,8 @@ class DevUtils(commands.Cog, name="Dev Utils",
         zero = "\u200b"
         result = re.sub("```", f"{zero}`{zero}`{zero}`{zero}", result)
 
+        if len(result) > 200 or result.count("\n") >= 40:
+            return await ctx.post_to_mystbin(result)
         await ctx.send(f"```ph\n{result}```")
 
     @commands.command(name="http")

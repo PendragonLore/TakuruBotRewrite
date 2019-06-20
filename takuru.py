@@ -30,16 +30,6 @@ class RightSiderContext(commands.Context):
     def db(self):
         return self.bot.db
 
-    async def send(self, content=None, **kwargs):
-        if not isinstance(content, (type(None), str)):
-            raise ValueError(f"Content must be str or NoneType not {type(content)}.")
-
-        ex = content or ""
-        if len(ex) > 1991 or ex.count("\n") > 40 and not self.invoked_with == "py":
-            return await self.post_to_mystbin(ex, "Content was too long so I put it here:")
-
-        return await super().send(content, **kwargs)
-
     async def paginate(self):
         await self.pages.paginate()
 

@@ -474,13 +474,9 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
 
         await ctx.send(f"Custom prefix {ret!r} removed.")
 
-    @commands.command()
-    async def test_date(self, ctx, *,
-                        argument: utils.HumanTime(
-                            arg_required=True, past_ok=True, converter=commands.MemberConverter(), greedy=True,
-                            default=None
-                        )):
-        await ctx.send(f"Date: {argument.date} Arg: {argument.arg}")
+    @commands.Cog.listener()
+    async def on_test_complete(self, thing):
+        await self.bot.get_guild(thing.gid).get_channel(thing.cid).send(repr(thing))
 
 
 def setup(bot):
