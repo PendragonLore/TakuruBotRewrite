@@ -117,7 +117,7 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         if sort_type not in {"hot", "new", "rising", "top", "controversial"}:
             return await ctx.send(f"`{sort_type}` is not a valid sort type.")
 
-        data = await self.get_post(ctx, f"/r/{urlquote(subreddit, safe='')}/{sort_type.lower()}.json", limit=20)
+        data = await self.get_post(ctx, f"/r/{urlquote(subreddit, safe='')}/{sort_type}.json", limit=20)
 
         await self.embed_post(ctx, data)
 
