@@ -219,10 +219,8 @@ class DevUtils(commands.Cog, name="Dev Utils",
         """Run code on TIO.
 
         Most programming languages are supported."""
-        if lang in self.tio_quickmap:
-            lang = self.tio_quickmap[lang]
-        if lang in self.tio_not_quickmap:
-            lang = self.tio_not_quickmap[lang]
+        lang = self.tio_quickmap.get(lang, lang)
+        lang = self.tio_not_quickmap(lang, lang)
 
         runner = Tio(ctx, lang, code)
 
@@ -231,7 +229,7 @@ class DevUtils(commands.Cog, name="Dev Utils",
         zero = "\u200b"
         result = re.sub("```", f"{zero}`{zero}`{zero}`{zero}", result)
 
-        if len(result) > 200 or result.count("\n") >= 40:
+        if len(result) > 2000 or result.count("\n") >= 40:
             return await ctx.post_to_mystbin(result)
         await ctx.send(f"```ph\n{result}```")
 
