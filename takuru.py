@@ -132,11 +132,10 @@ class TakuruBot(commands.Bot):
 
         return True
 
-    async def create_timer(self, name_, **kwargs):
-        time = kwargs.pop("__time")
+    async def create_timer(self, name_, time_, **kwargs):
         key_fmt = ":".join(f"{key}={value}" for key, value in kwargs.items())
 
-        ret = await self.redis.set(f"timer-name={name_}:{key_fmt}", 0, expire=int(time))
+        ret = await self.redis.set(f"timer-name={name_}:{key_fmt}", 0, expire=int(time_))
         return ret, key_fmt
 
     async def on_ready(self):

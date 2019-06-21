@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import typing
 from datetime import datetime
 
 import aioredis
@@ -160,22 +159,17 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         if not role_id:
             raise commands.BadArgument("No mute role setup for this guild.")
 
-        delta = (time.date - datetime.utcnow()).total_seconds() + 1
+        delta = (time.date - ctx.message.created_at).total_seconds() + 1
         if delta < 1:
             raise commands.BadArgument("Invalid time")
 
         try:
-            _, key_fmt = await self.bot.create_timer("mute", __time=delta, guild_id=guild_id,
-                                                     member_id=member.id, role_id=role_id)
-        except aioredis.ReplyError:
-            raise commands.BadArgument("Invalid time.")
-
-        try:
             await member.add_roles(discord.Object(id=role_id), reason=reason)
         except discord.HTTPException:
-            await self.bot.redis.delete(key_fmt)
             raise commands.BadArgument("Failed to give Mute role to the target, "
                                        "check permissions, hierarchy and if both are still in the guild.")
+        else:
+            await self.bot.create_timer("mute", delta, guild_id=guild_id, member_id=member.id, role_id=role_id)
 
         await ctx.send(f"Muted {member}, will be unmuted in {naturaldelta(delta)}")
 
