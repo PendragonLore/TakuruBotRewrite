@@ -68,5 +68,7 @@
   // Array of guild ids where markov logging and chaining is enabled
   markov_guilds: [
     0
-  ]
+  ],
+  // Your sentry URI
+  sentry_uri: ""
 }

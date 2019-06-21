@@ -85,9 +85,8 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
 
     @commands.command(name="kick")
     @utils.bot_and_author_have_permissions(kick_members=True)
-    async def kick(self, ctx, member: discord.Member, *, reason: typing.Optional[str] = None):
+    async def kick(self, ctx, member: discord.Member, *, reason="No reason."):
         """Kick a member, you can also provide a reason."""
-        reason = reason or "No reason."
         try:
             await member.kick(reason=reason)
         except discord.HTTPException:
@@ -97,13 +96,13 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
 
     @commands.command(name="ban")
     @utils.bot_and_author_have_permissions(ban_members=True)
-    async def ban(self, ctx, member: discord.Member, *, reason: typing.Optional[str] = None):
+    async def ban(self, ctx, member: discord.Member, *, reason="No reason."):
         """Ban a member, you can also provide a reason."""
-        reason = reason or "No reason."
         try:
             await member.ban(reason=reason)
         except discord.HTTPException:
-            return await ctx.send(f"Failed to ban {member}.")
+            return await ctx.send(f"Failed to ban {member}, check permissions, hierarchy "
+                                  f"and if the member is still in the guild.")
 
         await ctx.send(f"Banned **{member}**. ({reason})")
 

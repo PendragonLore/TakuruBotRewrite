@@ -2,6 +2,7 @@ import traceback
 
 import discord
 from discord.ext import commands
+import sentry_sdk
 
 from utils.emotes import ARI_DERP, YAM_SAD
 from utils.ezrequests import WebException
@@ -68,6 +69,13 @@ class CommandHandler(commands.Cog):
             await ctx.send("Not found or API did not respond.")
 
         else:
+            if ctx.bot.sentry:
+                with sentry_sdk.push_scope() as scope:
+                    scope.set_tag("guild", f"{ctx.guild} ({ctx.guild.id})")
+                    scope.set_tag("channel", f"#{ctx.channel} ({ctx.guild.id})")
+                    scope.set_tag("command", ctx.command.qualified_name)
+                    scope.set_tag("author", f"{ctx.author} ({ctx.author.id})")
+                    sentry_sdk.capture_exception(exc)
             traceback.print_exception(type(error), error, error.__traceback__)
 
             stack = 8

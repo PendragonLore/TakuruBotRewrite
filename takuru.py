@@ -6,6 +6,7 @@ import pathlib
 import re
 from collections import Counter
 from datetime import datetime
+import sentry_sdk
 
 import aioredis
 import async_cse
@@ -16,6 +17,15 @@ import wavelink
 from discord.ext import commands, tasks
 
 import utils
+
+config = utils.Config.from_file("config.json5")
+
+try:
+    sentry_uri = config.sentry_uri
+except KeyError:
+    sentry_uri = None
+else:
+    sentry_sdk.init(sentry_uri)
 
 
 class RightSiderContext(commands.Context):
@@ -67,12 +77,12 @@ class TakuruBot(commands.Bot):
         self.init_time = INIT_TIME
 
         self.wavelink = wavelink.Client(self)
-        config = utils.Config.from_file("config.json5")
         self.config = config
 
         self.prefix_dict = {}
         self.gateway_messages = Counter()
         self.owner = None
+        self.sentry = sentry_uri
 
         self.http_headers = {"User-Agent": "Python/aiohttp"}
 
