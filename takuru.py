@@ -201,11 +201,13 @@ class TakuruBot(commands.Bot):
 
 
 class PresenceUpdateFilter(logging.Filter):
+    reg = re.compile("Dispatching event (socket_raw_receive|member_update|socket_response)")
+
     def filter(self, record):
         msg = record.getMessage()
         if "{'t': 'PRESENCE_UPDATE'" in msg:
             return False
-        if re.match("Dispatching event (socket_raw_receive|member_update|socket_response)", msg):
+        if self.reg.match(msg):
             return False
 
         return True

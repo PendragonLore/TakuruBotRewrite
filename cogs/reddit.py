@@ -1,11 +1,12 @@
 import html
-import random
+from collections import deque
 from datetime import datetime
 from urllib.parse import quote as urlquote
 from urllib.parse import urlparse
 
 import discord
 from discord.ext import commands
+from lru import LRU
 
 import utils
 
@@ -84,7 +85,7 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         self.user_agent = "Python:TakuruBot:0.1 (by u/Pendragon_Lore)"
         self.headers = {"User-Agent": self.user_agent}
 
-        self._post_cache = {}
+        self._post_cache = LRU(64)
 
     @commands.group(name="reddit", aliases=["r"], invoke_without_command=True, case_insensitive=True)
     async def reddit(self, ctx):
@@ -95,18 +96,12 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         """Search up a post on reddit.
 
         This basically searches r/all."""
-        data = await self.get_post(ctx, "/search.json", q=query, limit=20)
-
-        await self.embed_post(ctx, data)
+        await self.do_post(ctx, "/search.json", q=query, limit=20)
 
     @reddit.command(name="subreddit", aliases=["sr"])
     async def subreddit_search(self, ctx, subreddit, *, query):
         """Search up a post on a subreddit."""
-        data = await self.get_post(
-            ctx, f"/r/{urlquote(subreddit, safe='')}/search.json", q=query, limit=20, restrict_sr="true"
-        )
-
-        await self.embed_post(ctx, data)
+        await self.do_post(ctx, f"/r/{urlquote(subreddit, safe='')}/search.json", q=query, limit=20, restrict_sr="true")
 
     @reddit.command(name="subsort", aliases=["ss"])
     async def subreddit_search_sorted(self, ctx, subreddit, sort_type: lambda x: x.lower()="hot"):
@@ -117,22 +112,28 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         if sort_type not in {"hot", "new", "rising", "top", "controversial"}:
             return await ctx.send(f"`{sort_type}` is not a valid sort type.")
 
-        data = await self.get_post(ctx, f"/r/{urlquote(subreddit, safe='')}/{sort_type}.json", limit=20)
+        await self.do_post(ctx, f"/r/{urlquote(subreddit, safe='')}/{sort_type}.json", limit=20)
 
-        await self.embed_post(ctx, data)
+    async def do_post(self, ctx, path, **params):
+        fmt = path.lower() + ":".join([f"{k}={v}" for k, v in params.items()]).lower()
 
-    async def get_post(self, ctx, path, **params):
-        data = await ctx.get(self.BASE + path, **params, __headers=self.headers)
-
-        return data
-
-    async def embed_post(self, ctx, data):
         try:
-            p = random.choice(data["data"]["children"])["data"]
-        except (TypeError, IndexError, ValueError, KeyError):
+            return self._post_cache[fmt].pop()
+        except (KeyError, IndexError):
+            pass
+
+        data = await ctx.get(self.BASE + path, **params, __headers=self.headers)
+        results = data["data"]["children"]
+
+        if not results:
             raise commands.BadArgument("No results.")
 
-        post = Post(p)
+        self._post_cache[fmt] = ret = deque(results)
+
+        return await self.embed_post(ctx, ret.pop())
+
+    async def embed_post(self, ctx, data):
+        post = Post(data["data"])
 
         if post.nsfw and not ctx.channel.is_nsfw():
             raise commands.BadArgument("Post is NSFW while this channel isn't.")

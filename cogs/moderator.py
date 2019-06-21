@@ -6,6 +6,7 @@ from datetime import datetime
 import aioredis
 import discord
 from discord.ext import commands, flags, tasks
+from humanize import naturaldelta
 
 import utils
 
@@ -121,7 +122,8 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
 
     @tasks.loop(reconnect=True)
     async def fetch_timers(self):
-        key = (await self.channel.get()).decode()
+        msg = await self.channel.get()
+        key = getattr(msg, "decode", msg.__str__)()
 
         if not key.startswith("timer-"):
             return
@@ -139,11 +141,14 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
     async def before_fetch_timers(self):
         db = self.bot.redis.db
         fmt = f"__keyevent@{db}__:expired"
+        channels = self.bot.redis.channels
 
-        if fmt not in self.bot.redis.channels and not self.channel:
+        if fmt not in channels:
             channel = await self.bot.redis.subscribe(fmt)
-
             self.channel = channel[0]
+        else:
+            channel = channels[fmt]
+            self.channel = channel
 
     @commands.command(name="tempmute")
     @utils.bot_and_author_have_permissions(manage_roles=True)
@@ -156,7 +161,10 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         if not role_id:
             raise commands.BadArgument("No mute role setup for this guild.")
 
-        delta = (time.date - datetime.utcnow()).total_seconds()
+        delta = (time.date - datetime.utcnow()).total_seconds() + 1
+        if delta < 1:
+            raise commands.BadArgument("Invalid time")
+
         try:
             _, key_fmt = await self.bot.create_timer("mute", __time=delta, guild_id=guild_id,
                                                      member_id=member.id, role_id=role_id)
@@ -170,7 +178,7 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
             raise commands.BadArgument("Failed to give Mute role to the target, "
                                        "check permissions, hierarchy and if both are still in the guild.")
 
-        await ctx.send(f"Muted {member}, will be unmuted on {time.date}")
+        await ctx.send(f"Muted {member}, will be unmuted in {naturaldelta(delta)}")
 
     @commands.Cog.listener()
     async def on_mute_complete(self, mute):

@@ -8,7 +8,7 @@ from html import unescape as htmlunescape
 import aiohttp
 import discord
 import lxml.etree as etree
-from discord.ext import commands, tasks
+from discord.ext import commands, flags, tasks
 
 import utils
 
@@ -194,17 +194,15 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
 
         await ctx.paginate()
 
-    @commands.command(name="sauce", aliases=["saucenao"])
+    @commands.command(name="sauce", aliases=["saucenao"], cls=flags.FlagCommand)
     @utils.requires_config("tokens", "apis", "saucenao")
-    async def saucenao(self, ctx, *, url: typing.Optional[lambda x: x.strip("<>")]=None):
+    async def saucenao(self, ctx, *, url: typing.Optional[lambda x: x.strip("<>")]=utils.FirstAttachment):
         """Get the sauce of an image."""
         try:
-            url = url or ctx.message.attachments[0].url
-
             async with ctx.bot.ezr.session.get(url) as r:
                 if "image/" not in r.headers["Content-Type"]:
                     raise TypeError()
-        except (aiohttp.ClientError, TypeError, IndexError):
+        except (aiohttp.ClientError, TypeError):
             raise commands.BadArgument("You must either provide a valid attachment or image url.")
 
         try:
@@ -220,7 +218,7 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         except Exception as e:
             raise e
 
-        r = sauce["results"][:5]
+        r = sauce["results"]
 
         for result in r:
             embed = discord.Embed(color=discord.Color(0x008CFF))
@@ -229,8 +227,7 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
                 [
                     f"**{k.replace('_', ' ').title()}:** {v}"
                     for k, v in result["data"].items()
-                    if not k == "data"
-                    if not k == "ext_urls"
+                    if k not in {"data", "ext_urls"}
                 ]
             )
             embed.set_thumbnail(url=result["header"]["thumbnail"])

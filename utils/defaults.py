@@ -16,4 +16,4 @@ class FirstAttachment(flags.ParamDefault):
         try:
             return ctx.message.attachments[0].url
         except IndexError:
-            raise commands.BadArgument("No attachment or content provided.")
+            raise commands.BadArgument("No attachment or argument provided.")
