@@ -4,8 +4,8 @@ from datetime import datetime
 
 import aioredis
 import discord
-from discord.ext import commands, flags, tasks
-from humanize import naturaldelta
+from discord.ext import commands, tasks
+from humanize import naturaldelta, naturaltime
 
 import utils
 
@@ -49,38 +49,67 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
     def cog_unload(self):
         self.fetch_timers.cancel()
 
-    @commands.command(name="purge", aliases=["prune"], cls=flags.FlagCommand)
-    @utils.bot_and_author_have_permissions(manage_messages=True)
-    async def bulk_delete(
-            self, ctx, *, args: flags.FlagParser(amount=int, bot_only=bool, member=discord.Member)=flags.EmptyFlags
-    ):
-        """Bulk-delete a certain amout of messages in the current channel.
+    async def do_bulk_delete(self, ctx, amount, **kwargs):
+        if amount <= 0:
+            raise commands.BadArgument("Amount too little.")
 
-        The amount of messages specified might not be the amount deleted.
-        Limit is set to 500 per command, the bot can't delete messages older than 14 days."""
-        if args["bot_only"] and args["member"]:
-            raise commands.BadArgument("Either specify a member or bot only, not both.")
-
-        amount = args["amount"] or 10
-        if amount > 500:
-            return await ctx.send("Maximum of 500 messages per command.")
-
-        check = None
-        if args["bot_only"] is not None:
-            def check(m):
-                return m.author.bot
-        elif args["member"] is not None:
-            def check(m):
-                return m.author.id == args["member"].id
+        amount = min(amount, 1000)
 
         try:
             await ctx.message.delete()
         except discord.HTTPException:
             pass
 
-        purge = await ctx.channel.purge(limit=amount, check=check, bulk=True)
+        try:
+            deleted = await ctx.channel.purge(limit=amount, bulk=True, **kwargs)
+        except discord.HTTPException:
+            raise commands.BadArgument("Sorry but I wasn't able to bulk delete messages "
+                                       "in this channel, please check my permissions.")
 
-        await ctx.send(f"Successfully deleted {len(purge)} message(s).", delete_after=5)
+        if not deleted:
+            return await ctx.send("No messages deleted.")
+
+        last_message_date = datetime.utcnow() - deleted[-1].created_at
+        first_message_date = datetime.utcnow() - deleted[0].created_at
+        total_authors = {m.author for m in deleted}
+        total_bots = {m.author for m in deleted if m.author.bot}
+
+        await ctx.send(f"Deleted {len(deleted)} messages from "
+                       f"{len(total_authors)} different authors ({len(total_bots)} bots).\n"
+                       f"Oldest message from {naturaltime(last_message_date)}, "
+                       f"newest from {naturaltime(first_message_date)}.", delete_after=7)
+
+    @commands.group(name="purge", aliases=["prune", "cleanup"], invoke_without_command=True)
+    @utils.bot_and_author_have_permissions(manage_messages=True)
+    async def bulk_delete(self, ctx, amount: int):
+        """Group of commands for bulk deleting messages.
+
+        The amount of messages specified is not the amount deleted but the amount scanned.
+        Limit is set to 1000 per command, the bot can't delete messages older than 14 days.
+
+        If no subcommand is called this bulk deleting will not be filtered."""
+        await self.do_bulk_delete(ctx, amount, check=lambda _: True)
+
+    @bulk_delete.command(name="beforeafter", aliases=["ba"])
+    @utils.bot_and_author_have_permissions(manage_messages=True)
+    async def bulk_delete_after_before(self, ctx, amount: int, *, before_after: utils.GreedyHumanTime):
+        """Bulk delete x amount of messages before but after a date.
+
+        Two dates must be provided, see TODO! faq dates !TODO for valid formats."""
+
+    @bulk_delete.command(name="member", aliases=["m"])
+    @utils.bot_and_author_have_permissions(manage_messages=True)
+    async def bulk_delete_member(self, ctx, amount: int, members: commands.Greedy[discord.Member]):
+        """Bulk delete x amount of messages from a list of members."""
+        if not members:
+            raise commands.BadArgument("Must provide at least one member.")
+        await self.do_bulk_delete(ctx, amount, check=lambda m: m.author in members)
+
+    @bulk_delete.command(name="bots", aliases=["bot", "b"])
+    @utils.bot_and_author_have_permissions(manage_messages=True)
+    async def bulk_delete_bots(self, ctx, amount: int):
+        """Bulk delete x amount of messages from bots."""
+        await self.do_bulk_delete(ctx, amount, check=lambda m: m.author.bot)
 
     @commands.command(name="kick")
     @utils.bot_and_author_have_permissions(kick_members=True)
@@ -184,15 +213,11 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         role = guild.get_role(mute["role_id"])
         member = guild.get_member(mute["member_id"])
 
-        # ifs for more precise logging
-        if not role and not member:
-            LOG.warning("Role and member for mute %r not found", mute)
-            return
-        if not role:
-            LOG.warning("Role for mute %r not found", mute)
-            return
-        if not member:
-            LOG.warning("Member for mute %r not found", mute)
+        if not role or not member:
+            # yes.
+            warn = ("Role" if not role else '') + \
+                   ("and member" if role and not member else ("Member" if not member else ""))
+            LOG.warning("%s for mute %r not found", warn.strip(), mute)
             return
 
         try:

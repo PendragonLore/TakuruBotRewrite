@@ -118,6 +118,9 @@ class DateTime(Time):
         if not pdt_ctx.hasDateOrTime:
             raise commands.BadArgument("Invalid date passed.")
 
+        if start not in {0, 1} and not end == len(argument):
+            raise commands.BadArgument("Invalid date passed.")
+
         if not pdt_ctx.hasTime:
             date = date.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
 
@@ -126,7 +129,6 @@ class DateTime(Time):
 
         self.date = date
         self._past = now > date
-
         if self._arg_required:
             if start in {0, 1}:
                 if start == 1:
@@ -201,6 +203,33 @@ class HumanTime(DateTime):
             ret = await super().convert(ctx, argument)
 
             return ret
+
+
+class GreedyHumanTime(HumanTime):
+    __slots__ = ("results", "_rest", "_min_len")
+
+    def __init__(self, **kwargs):
+        self.results = []
+        self._rest = []
+
+        self._min_len = kwargs.pop("min_len", 1)
+        super().__init__(**kwargs, arg_required=False)
+
+    async def convert(self, ctx, argument):
+        for arg in argument.split():
+            try:
+                joined = " ".join(self._rest)
+                conv = await super().convert(ctx, f"{arg} {joined}")
+            except commands.BadArgument:
+                self._rest.append(arg)
+            else:
+                self._rest = []
+                self.results.append(conv)
+
+        if len(self.results) < self._min_len:
+            raise commands.BadArgument(f"Must pass at least {self._min_len} valid dates ({len(self.results)} passed).")
+
+        return self.results
 
 
 class Codeblock(commands.Converter):
