@@ -39,10 +39,6 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         auth = data["response"]["token_type"].capitalize() + " " + data["response"]["access_token"]
         self.token = auth
 
-    @pixiv_token.before_loop
-    async def before_pixiv_token(self):
-        await self.bot.wait_until_ready()
-
     @commands.command(name="pixiv")
     @utils.requires_config("tokens", "apis", "pixiv")
     async def pixiv(self, ctx, *, query):

@@ -26,7 +26,6 @@ class Music(commands.Cog):
         bot.loop.create_task(self.initiate_nodes())
 
     async def initiate_nodes(self):
-        await self.bot.wait_until_ready()
         if not self.wave_node:
             self.wave_node = await self.bot.wavelink.initiate_node(**self.bot.config.wavelink)
 

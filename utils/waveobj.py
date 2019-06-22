@@ -68,8 +68,6 @@ class Player(wavelink.Player):
             await asyncio.sleep(10)
 
     async def player_loop(self):
-        await self.bot.wait_until_ready()
-
         await self.set_preq("Flat")
         # We can do any pre loop prep here...
         await self.set_volume(self.volume)
