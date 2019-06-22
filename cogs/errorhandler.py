@@ -1,8 +1,8 @@
 import traceback
 
 import discord
-from discord.ext import commands
 import sentry_sdk
+from discord.ext import commands
 
 from utils.emotes import ARI_DERP, YAM_SAD
 from utils.ezrequests import WebException

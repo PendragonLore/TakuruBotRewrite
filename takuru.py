@@ -6,13 +6,13 @@ import pathlib
 import re
 from collections import Counter
 from datetime import datetime
-import sentry_sdk
 
 import aioredis
 import async_cse
 import async_pokepy
 import asyncpg
 import discord
+import sentry_sdk
 import wavelink
 from discord.ext import commands, tasks
 
