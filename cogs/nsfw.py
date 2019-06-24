@@ -26,7 +26,7 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         try:
             self.pixiv_data = self.bot.config.tokens.apis.pixiv
         except KeyError:
-            LOG.debug("No pixiv data provided")
+            LOG.warning("No pixiv data provided")
         else:
             self.pixiv_token.start()
 

@@ -90,7 +90,10 @@ class ShortTime(Time):
 
         now = ctx.message.created_at
 
-        self.date = now + relativedelta(**{k: int(v) for k, v in match.groupdict(default=0).items()})
+        try:
+            self.date = now + relativedelta(**{k: int(v) for k, v in match.groupdict(default=0).items()})
+        except ValueError:
+            raise commands.BadArgument("Date too distant from now.")
         self._past = now > self.date
 
         if self._arg_required:

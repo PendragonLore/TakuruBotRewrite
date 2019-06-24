@@ -401,7 +401,7 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
             sql = """
             SELECT owner_id
             FROM memes
-            WHERE guild_id = $1 
+            WHERE guild_id = $1
             AND name = $2
             AND owner_id = $3;
             """
@@ -415,7 +415,7 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
             sql = """
             UPDATE memes
             SET owner_id = $1
-            WHERE name = $2 
+            WHERE name = $2
             AND guild_id = $3;
             """
 

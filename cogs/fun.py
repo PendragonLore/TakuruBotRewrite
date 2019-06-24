@@ -14,11 +14,8 @@ class FunStuff(commands.Cog, name="Fun",
     """Fun stuff, I think."""
 
     @commands.command(name="dog", aliases=["dogs", "doggos", "doggo"])
-    async def dogs(self, ctx, amount: Optional[int] = 1):
+    async def dogs(self, ctx, amount: Optional[lambda x: min(int(x), 50)] = 1):
         """Get a random dog image, up to 50 per command."""
-        if amount > 50:
-            return await ctx.send("You can only get up to 50 dog pics at a time.")
-
         dogs = await ctx.get(f"https://dog.ceo/api/breeds/image/random/{amount}")
 
         for dog in dogs["message"]:
@@ -31,11 +28,8 @@ class FunStuff(commands.Cog, name="Fun",
 
     @commands.command(name="cat", aliases=["cats"])
     @utils.requires_config("tokens", "apis", "catapi")
-    async def cats(self, ctx, amount: Optional[int] = 1):
+    async def cats(self, ctx, amount: Optional[lambda x: min(int(x), 100)] = 1):
         """Get a random cat image, up to 100 per command."""
-        if amount > 100:
-            return await ctx.send("You can only get up to 100 cat pics at a time.")
-
         headers = (("x-api-key", ctx.bot.config.tokens.apis.catapi),)
 
         cats = await ctx.get("https://api.thecatapi.com/v1/images/search", limit=amount, __headers=headers)
@@ -96,6 +90,7 @@ class FunStuff(commands.Cog, name="Fun",
         """Owoify some text ~~*send help*~~."""
         owo_chars = ["w", "u", "owo", "uwu", "nya"]
         chars = []
+
         for x in text:
             if not x.strip():
                 chars.append(x)

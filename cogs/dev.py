@@ -2,6 +2,7 @@ import base64
 import binascii
 import io
 import os
+import random
 import re
 import typing
 import zlib
@@ -243,11 +244,12 @@ class DevUtils(commands.Cog, name="Dev Utils",
 
         nodes = etree.fromstring(html, etree.HTMLParser())
         embed = discord.Embed(
-            title="{0} - {1}".format(nodes.xpath("//span/text()")[0].strip(), nodes.xpath("//h1/text()")[0].strip()),
+            title=nodes.xpath("string((//h1)[1])").strip(),
             color=discord.Color(0x008CFF)
         )
-        embed.description = nodes.xpath("//p/text()")[0].strip()
-        embed.set_thumbnail(url="https://httpstatusdogs.com/img/{0}.jpg".format(code))
+        embed.description = nodes.xpath("string((//p)[2])").strip()
+
+        embed.set_image(url=f"https://http.cat/{code}.jpg")
 
         await ctx.send(embed=embed)
 

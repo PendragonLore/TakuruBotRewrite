@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import itertools
 import logging
 import os
@@ -71,6 +72,7 @@ class RightSiderContext(commands.Context):
 class TakuruBot(commands.Bot):
     def __init__(self):
         self.prefixes = []
+
         super().__init__(command_prefix=self.get_custom_prefix,
                          activity=discord.Activity(type=discord.ActivityType.listening, name="positive delusions"),
                          owner_id=371741730455814145)
@@ -133,10 +135,18 @@ class TakuruBot(commands.Bot):
         return True
 
     async def create_timer(self, name_, time_, **kwargs):
-        key_fmt = ":".join(f"{key}={value}" for key, value in kwargs.items())
+        h = hashlib.sha256(":".join(f"{key}={value}" for key, value in kwargs.items()).encode()).hexdigest()
+        kwargs["name"] = name_
 
-        ret = await self.redis.set(f"timer-name={name_}:{key_fmt}", 0, expire=int(time_))
-        return ret, key_fmt
+        tr = self.redis.multi_exec()
+
+        tr.hmset_dict(f"timer-{name_}:{h}", **kwargs)
+        tr.hmset_dict(f"lookup-timer-{name_}:{h}", **kwargs)
+        tr.expire(f"timer-{name_}:{h}", int(time_))
+
+        await tr.execute()
+
+        LOG.info("Created timers with args %s, waiting %d seconds", kwargs, int(time_))
 
     async def on_ready(self):
         self.owner = self.get_user(self.owner_id)
@@ -204,9 +214,10 @@ class TakuruBot(commands.Bot):
         for cog in self.init_cogs:
             try:
                 self.load_extension(cog)
-                LOG.info("Successfully loaded %s", cog)
             except Exception as exc:
                 LOG.exception("Failed to load %s [%s: %s]", cog, type(exc).__name__, exc)
+            else:
+                LOG.info("Successfully loaded %s", cog)
 
 
 class PresenceUpdateFilter(logging.Filter):

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import Counter
 from datetime import datetime
 
 import aioredis
@@ -12,24 +13,6 @@ import utils
 LOG = logging.getLogger("cogs.moderator")
 
 
-class DummyObject:
-    def __init__(self, **kwargs):
-        self._data = kwargs
-
-        for key, value in kwargs.items():
-            try:
-                setattr(self, key, int(value))
-            except ValueError:
-                setattr(self, key, value)
-
-    def __getitem__(self, item):
-        return self.__getattribute__(item)
-
-    def __repr__(self):
-        fmt = " ".join(f"{k}={v!r}" for k, v in self._data.items())
-        return f"<{fmt}>"
-
-
 class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2.5, commands.BucketType.user))):
     """Commands for moderation purposes.
     Work in progress."""
@@ -40,6 +23,9 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         self._mute_data = asyncio.Event(loop=self.bot.loop)
         self._current_mute = None
         self.channel = None
+
+        db = self.bot.redis.db
+        self._channel_fmt = f"__keyevent@{db}__:expired"
 
         self.fetch_timers.add_exception_type(aioredis.PoolClosedError)
         self.fetch_timers.add_exception_type(aioredis.ChannelClosedError)
@@ -63,7 +49,7 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         try:
             deleted = await ctx.channel.purge(limit=amount, bulk=True, **kwargs)
         except discord.HTTPException:
-            raise commands.BadArgument("Sorry but I wasn't able to bulk delete messages "
+            raise commands.BadArgument("Sorry, but I wasn't able to bulk delete messages "
                                        "in this channel, please check my permissions.")
 
         if not deleted:
@@ -90,13 +76,6 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         If no subcommand is called this bulk deleting will not be filtered."""
         await self.do_bulk_delete(ctx, amount, check=lambda _: True)
 
-    @bulk_delete.command(name="beforeafter", aliases=["ba"])
-    @utils.bot_and_author_have_permissions(manage_messages=True)
-    async def bulk_delete_after_before(self, ctx, amount: int, *, before_after: utils.GreedyHumanTime):
-        """Bulk delete x amount of messages before but after a date.
-
-        Two dates must be provided, see TODO! faq dates !TODO for valid formats."""
-
     @bulk_delete.command(name="member", aliases=["m"])
     @utils.bot_and_author_have_permissions(manage_messages=True)
     async def bulk_delete_member(self, ctx, amount: int, members: commands.Greedy[discord.Member]):
@@ -113,7 +92,7 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
 
     @commands.command(name="kick")
     @utils.bot_and_author_have_permissions(kick_members=True)
-    async def kick(self, ctx, member: discord.Member, *, reason="No reason."):
+    async def kick(self, ctx, member: discord.Member, *, reason: commands.clean_content="No reason."):
         """Kick a member, you can also provide a reason."""
         try:
             await member.kick(reason=reason)
@@ -124,7 +103,7 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
 
     @commands.command(name="ban")
     @utils.bot_and_author_have_permissions(ban_members=True)
-    async def ban(self, ctx, member: discord.Member, *, reason="No reason."):
+    async def ban(self, ctx, member: discord.Member, *, reason: commands.clean_content="No reason."):
         """Ban a member, you can also provide a reason."""
         try:
             await member.ban(reason=reason)
@@ -132,55 +111,107 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
             return await ctx.send(f"Failed to ban {member}, check permissions, hierarchy "
                                   f"and if the member is still in the guild.")
 
-        await ctx.send(f"Banned **{member}**. ({reason})")
+        await ctx.send(f"Banned **{member}** ({reason})")
 
     @commands.command(name="unban")
     @utils.bot_and_author_have_permissions(ban_members=True)
-    async def unban(self, ctx, user_id: int, *, reason):
+    async def unban(self, ctx, user_id: int, *, reason: commands.clean_content="No reason."):
         """Unban a member, only IDs accepted."""
-        member = discord.Object(id=user_id)
         try:
-            await ctx.guild.unban(member, reason=reason or "No reason.")
+            await ctx.guild.unban(discord.Object(id=user_id), reason=reason)
         except discord.HTTPException:
-            await ctx.send(f"Couldn't unban user with id `{user_id}")
-            return
+            return await ctx.send(f"Couldn't unban user with id `{user_id}`")
 
-        await ctx.send(f"Unbanned member with id `{user_id}`")
+        await ctx.send(f"Unbanned user with id `{user_id}`")
 
     @tasks.loop(reconnect=True)
     async def fetch_timers(self):
-        msg = await self.channel.get()
-        key = getattr(msg, "decode", msg.__str__)()
+        key = await self.channel.get(encoding="utf-8")
 
-        if not key.startswith("timer-"):
-            return
+        if not key or not key.startswith("timer-"):
+            self.fetch_timers.restart()
 
-        kwargs = dict([s.split("=") for s in key[6:].split(":")])
+        tr = self.bot.redis.multi_exec()
 
-        name = kwargs.pop("name", None)
-        if not name:
+        tr.hgetall(f"lookup-{key}")
+        tr.delete(f"lookup-{key}")
+
+        kwargs, _ = await tr.execute()
+
+        try:
+            name = kwargs.pop("name")
+        except KeyError:
             LOG.warning("Timer with args %s doesn't have a name field, discarding.", kwargs)
         else:
             LOG.info("Dispatching timer %s with args %s", name, kwargs)
-            self.bot.dispatch(f"{name}_complete", DummyObject(**kwargs))
+            self.bot.dispatch(f"{name}_complete", kwargs)
 
     @fetch_timers.before_loop
     async def before_fetch_timers(self):
-        db = self.bot.redis.db
-        fmt = f"__keyevent@{db}__:expired"
-        channels = self.bot.redis.channels
+        self.channel = (await self.bot.redis.subscribe(self._channel_fmt))[0]
 
-        if fmt not in channels:
-            channel = await self.bot.redis.subscribe(fmt)
-            self.channel = channel[0]
-        else:
-            channel = channels[fmt]
-            self.channel = channel
+    @fetch_timers.after_loop
+    async def after_fetch_timers(self):
+        await self.bot.redis.unsubscribe(self._channel_fmt)
+
+    @commands.command(name="setmute", aliases=["setmuterole"])
+    @utils.bot_and_author_have_permissions(manage_roles=True)
+    async def set_mute_role(self, ctx, *, role: discord.Role):
+        """Set the mute role use in `tempmute` and `mute`.
+
+        This will not automatically override the permissions of the role in any channel.
+        If you want to do so, invoke ``setmuteperms``."""
+        resp = await ctx.bot.redis.set(f"mute_role_id:{ctx.guild.id}", role.id)
+
+        if not resp:
+            return await ctx.send("Something went wrong while setting the mute role, report this to the developer.")
+
+        await ctx.send(f"Set mute role for this guild to `{role}`")
+
+    @commands.command(name="setmuteperms")
+    @utils.bot_and_author_have_permissions(manage_roles=True)
+    async def set_mute_role_perms(self, ctx):
+        """Set the overwrites of each channel of this guild for the mute role.
+
+        :x: Send Messages
+        :x: Add Reactions."""
+
+        role = ctx.guild.get_role(int(await self.bot.redis.get(f"mute_role_id:{ctx.guild.id}")))
+
+        if not role:
+            raise commands.BadArgument("No mute role setup for this guild.")
+
+        msg = await ctx.send("Setting permissions, might take a while...")
+
+        channels = ctx.guild.text_channels
+        counter = Counter()
+
+        for channel in channels:
+            perms = channel.overwrites_for(role)
+
+            if not perms.send_messages and not perms.add_reactions:
+                counter["skip"] += 1
+                continue
+            try:
+                await channel.set_permissions(role, send_messages=False, add_reactions=False)
+            except discord.HTTPException:
+                counter["miss"] += 1
+            else:
+                counter["hit"] += 1
+
+        lines = [f"Done, changed permissions of {counter['hit']} channels out of {len(channels)} for role {role}."]
+
+        if counter["skip"]:
+            lines.append(f"Skipped {counter['skip']} channels due to permissions already set up.")
+        if counter["miss"]:
+            lines.append(f"Failed to change the permissions of {counter['miss']} channels.")
+
+        await msg.edit(content="\n".join(lines))
 
     @commands.command(name="tempmute")
     @utils.bot_and_author_have_permissions(manage_roles=True)
     async def tempmute(self, ctx, time: utils.ShortTime(arg_required=False, past_ok=False),
-                       member: discord.Member, *, reason="No reason"):
+                       member: discord.Member, *, reason: commands.clean_content="No reason"):
         guild_id = ctx.guild.id
 
         role_id = await self.bot.redis.get(f"mute_role_id:{guild_id}")
@@ -188,7 +219,7 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         if not role_id:
             raise commands.BadArgument("No mute role setup for this guild.")
 
-        delta = (time.date - ctx.message.created_at).total_seconds() + 1
+        delta = (time.date - ctx.message.created_at).total_seconds()
         if delta < 1:
             raise commands.BadArgument("Invalid time")
 
@@ -200,22 +231,42 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         else:
             await self.bot.create_timer("mute", delta, guild_id=guild_id, member_id=member.id, role_id=role_id)
 
-        await ctx.send(f"Muted {member}, will be unmuted in {naturaldelta(delta)}")
+        try:
+            nat = naturaldelta(delta)
+        except OverflowError:
+            nat = "a long time"
+        await ctx.send(f"Muted {member} ({reason}), will be unmuted in {nat}.")
+
+    @commands.command(name="mutes")
+    async def mutes(self, ctx):
+        redis = ctx.bot.redis
+        lines = []
+
+        async for key in redis.iscan(match="timer-mute:*"):
+            data = await redis.hmget(key, "guild_id", "member_id")
+            if not int(data[0]) == ctx.guild.id:
+                continue
+
+            ttl = await redis.ttl(key)
+
+            lines.append(f"{ctx.guild.get_member(int(data[1]))} - Going to be unmuted in {naturaldelta(ttl)}")
+
+        await ctx.send("\n".join(lines) or "none")
 
     @commands.Cog.listener()
     async def on_mute_complete(self, mute):
-        guild = self.bot.get_guild(mute["guild_id"])
+        guild = self.bot.get_guild(int(mute["guild_id"]))
 
         if not guild:
             LOG.warning("Guild for mute %r not found", mute)
             return
 
-        role = guild.get_role(mute["role_id"])
-        member = guild.get_member(mute["member_id"])
+        role = guild.get_role(int(mute["role_id"]))
+        member = guild.get_member(int(mute["member_id"]))
 
         if not role or not member:
             # yes.
-            warn = ("Role" if not role else '') + \
+            warn = ("Role" if not role else "") + \
                    ("and member" if role and not member else ("Member" if not member else ""))
             LOG.warning("%s for mute %r not found", warn.strip(), mute)
             return

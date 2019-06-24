@@ -442,9 +442,9 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
 
         async with ctx.db.acquire() as db:
             sql = """
-            INSERT INTO prefixes (guild_id, prefix) 
-            VALUES ($1, $2) 
-            ON CONFLICT (guild_id) DO 
+            INSERT INTO prefixes (guild_id, prefix)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO
             UPDATE SET prefix = $2;
             """
             await db.execute(sql, ctx.guild.id, prefix)
