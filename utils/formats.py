@@ -179,12 +179,9 @@ class Paginator:
             )
 
             try:
-                exc = done.pop().exception()
-            except KeyError:
+                done.pop().result()
+            except (discord.HTTPException, asyncio.TimeoutError, KeyError):
                 return await self.stop()
-            else:
-                if isinstance(exc, (discord.HTTPException, asyncio.TimeoutError)):
-                    return await self.stop()
 
             for future in pending:
                 future.cancel()
