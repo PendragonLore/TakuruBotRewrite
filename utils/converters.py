@@ -265,6 +265,15 @@ class Parser(argparse.ArgumentParser):
 
 
 class Flag:
+    __slots__ = (
+        "greedy",
+        "converter",
+        "aliases",
+        "required",
+        "consume",
+        "kwargs"
+    )
+
     def __init__(self, *, greedy=False, converter=None, aliases=None, required=False, consume=True, **kwargs):
         self.greedy = greedy
         self.converter = converter
