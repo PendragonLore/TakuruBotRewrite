@@ -339,7 +339,7 @@ class ShellFlags(commands.Converter):
                     ret[name] = ar
                     continue
 
-                if flag.consume and arg:
+                if flag.consume:
                     ret[name] = await conv.convert(ctx, " ".join(arg))
                 else:
                     ret[name] = await conv.convert(ctx, arg)
