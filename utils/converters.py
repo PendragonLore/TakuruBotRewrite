@@ -284,11 +284,6 @@ class Flag:
         self.kwargs = kwargs
 
 
-class EmptyArgs(dict):
-    def __getitem__(self, item):
-        return None
-
-
 class ShellFlags(commands.Converter):
     def __init__(self, **kwargs):
         self.flags = kwargs
