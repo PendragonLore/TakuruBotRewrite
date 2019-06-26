@@ -25,7 +25,7 @@ class Paginator:
         "reactions",
     )
 
-    def __init__(self, ctx, embed: bool = True):
+    def __init__(self, ctx):
         self.ctx = ctx
         self.bot = ctx.bot
         self.user = ctx.author
@@ -34,14 +34,18 @@ class Paginator:
 
         self.execute = None
         self.entries = []
-        self.embed = embed
+        self.embed = None
         self.max_pages = None
         self.paginating = True
         self.current = 0
+
+        part = functools.partial(self.stop, delete=True)
+        part.__doc__ = self.stop.__doc__
+
         self.reactions = [
             ("\N{BLACK LEFT-POINTING TRIANGLE}", self.backward),
             ("\N{BLACK RIGHT-POINTING TRIANGLE}", self.forward),
-            ("\N{BLACK SQUARE FOR STOP}", functools.partial(self.stop, delete=True)),
+            ("\N{BLACK SQUARE FOR STOP}", part),
             ("\N{INFORMATION SOURCE}", self.info),
         ]
 
@@ -61,7 +65,9 @@ class Paginator:
             e = PaginationError("No pagination entries.")
             raise commands.CommandInvokeError(e) from e
 
-        if self.embed is False:
+        if not self.embed:
+            self.entries = [entry + f"\n\nPage {page} of {len(self.entries)}"
+                            for page, entry in enumerate(self.entries, 1)]
             try:
                 self.msg = await self.channel.send(self.entries[0])
             except AttributeError:
@@ -120,6 +126,18 @@ class Paginator:
 
     async def info(self):
         """shows this page."""
+        fmt = []
+
+        for emoji, func in self.reactions:
+            fmt.append(f"{emoji} {func.__doc__}")
+
+        if not self.embed:
+            fmt.insert(0, "**Instructions**\n"
+                          "This is a reaction paginator, when you react to one of the buttons below the message gets"
+                          " edited. Below you will find what each does.\n\n"
+                          "**Reactions**")
+            return await self.msg.edit(content="\n".join(fmt))
+
         embed = discord.Embed(color=discord.Color(0x008CFF))
 
         embed.set_author(name="Instructions")
@@ -129,16 +147,15 @@ class Paginator:
             "the message gets edited. Below you will find what each does."
         )
 
-        for emoji, func in self.reactions:
-            embed.add_field(name=emoji, value=f"This reaction {func.__doc__}", inline=False)
+        embed.add_field(name="Reactions", value="\n".join(fmt))
 
         await self.msg.edit(embed=embed)
 
     def check(self, reaction, user):
-        if user.id != self.user.id:
+        if not user.id == self.user.id:
             return False
 
-        if reaction.message.id != self.msg.id:
+        if not reaction.message.id == self.msg.id:
             return False
 
         for (emoji, func) in self.reactions:
@@ -147,7 +164,9 @@ class Paginator:
                 return True
         return False
 
-    async def paginate(self):
+    async def paginate(self, *, embed: bool = True):
+        self.embed = embed
+
         await self.setup()
 
         while self.paginating:
@@ -225,6 +244,6 @@ class Plural:
         v = self.value
         singular, _, pl = format_spec.partition('|')
         pl = pl or f"{singular}s"
-        if abs(v) != 1:
+        if not abs(v) == 1:
             return f"{v} {pl}"
         return f"{v} {singular}"

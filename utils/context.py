@@ -18,8 +18,8 @@ class RightSiderContext(commands.Context):
     def db(self):
         return self.bot.db
 
-    async def paginate(self):
-        await self.pages.paginate()
+    async def paginate(self, *, embed: bool = True):
+        await self.pages.paginate(embed=embed)
 
     async def _request(self, __method: str, __url: str, **params):
         return await self.bot.ezr.request(__method, __url, **params)
