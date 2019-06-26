@@ -26,50 +26,6 @@ except KeyError:
 else:
     sentry_sdk.init(sentry_uri)
 
-NO_UVLOOP = frozenset({"win32", "cygwin"})
-
-
-class RightSiderContext(commands.Context):
-    __slots__ = (
-        "pages",
-    )
-
-    def __init__(self, **attrs):
-        super().__init__(**attrs)
-
-        self.pages = utils.Paginator(self)
-
-    @property
-    def db(self):
-        return self.bot.db
-
-    async def paginate(self):
-        await self.pages.paginate()
-
-    async def _request(self, __method: str, __url: str, **params):
-        return await self.bot.ezr.request(__method, __url, **params)
-
-    async def post(self, *args, **kwargs):
-        return await self._request("POST", *args, **kwargs)
-
-    async def get(self, *args, **kwargs):
-        return await self._request("GET", *args, **kwargs)
-
-    async def post_to_mystbin(self, content, ex="", **kwargs):
-        try:
-            haste = await self.post("https://mystb.in/documents", __data=content)
-            url = f"https://mystb.in/{haste['key']}"
-        except utils.ezrequests.WebException:
-            raise commands.BadArgument("mystbin did not respond.")
-
-        return await super().send(f"{ex} <{url}>", **kwargs)
-
-    async def add_reaction(self, emote):
-        try:
-            return await self.message.add_reaction(emote)
-        except discord.HTTPException:
-            pass
-
 
 class TakuruBot(commands.Bot):
     def __init__(self):
@@ -149,7 +105,7 @@ class TakuruBot(commands.Bot):
         if message.content == self.user.mention:
             await message.add_reaction(utils.FESTIVE)
 
-        ctx = await self.get_context(message, cls=RightSiderContext)
+        ctx = await self.get_context(message, cls=utils.RightSiderContext)
         await self.invoke(ctx)
 
     async def on_command(self, ctx):
