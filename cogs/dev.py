@@ -2,7 +2,6 @@ import base64
 import binascii
 import io
 import os
-import random
 import re
 import typing
 import zlib
@@ -260,7 +259,7 @@ class DevUtils(commands.Cog, name="Dev Utils",
         Supports, and probably will only ever support, haskell, c, c++ and python 3.5.x
         You need to include a codeblock which denotes the language.
         Do not abuse this kthx."""
-        if lang not in self.coliru_mapping.keys():
+        if lang not in self.coliru_mapping:
             return await ctx.send("Supported languages for code blocks are `py`, `python`, `c`, `cpp` and `haskell`.")
 
         payload = {"src": code, "cmd": self.coliru_mapping[lang]}

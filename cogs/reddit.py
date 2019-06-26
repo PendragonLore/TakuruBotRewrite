@@ -118,7 +118,7 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         fmt = path.lower() + ":".join([f"{k}={v}" for k, v in params.items()]).lower()
 
         try:
-            return self._post_cache[fmt].pop()
+            return await self.embed_post(ctx, self._post_cache[fmt].pop())
         except (KeyError, IndexError):
             pass
 
@@ -128,7 +128,7 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         if not results:
             raise commands.BadArgument("No results.")
 
-        self._post_cache[fmt] = ret = deque(results)
+        self._post_cache[fmt] = ret = deque(results, maxlen=20)
 
         return await self.embed_post(ctx, ret.pop())
 

@@ -32,12 +32,6 @@ class Paginator:
         self.channel = ctx.channel
         self.msg = ctx.message
 
-        perms = self.channel.permissions_for(self.ctx.me)
-        missing = [perm for perm, value in perms
-                   if perm in {"add_reaction", "embed_links", "read_message_history"} and not value]
-        if missing:
-            raise commands.BotMissingPermissions(missing)
-
         self.execute = None
         self.entries = []
         self.embed = embed
@@ -54,7 +48,15 @@ class Paginator:
     def add_entry(self, entry):
         self.entries.append(entry)
 
+    PAGINATION_PERMS = frozenset({"add_reaction", "embed_links", "read_message_history"})
+
     async def setup(self):
+        perms = self.channel.permissions_for(self.ctx.me)
+        missing = [perm for perm, value in perms
+                   if perm in self.PAGINATION_PERMS and not value]
+        if missing:
+            raise commands.BotMissingPermissions(missing)
+
         if not self.entries:
             e = PaginationError("No pagination entries.")
             raise commands.CommandInvokeError(e) from e
@@ -213,3 +215,16 @@ class Tabulator:
 
         to_draw.append(sep)
         return "\n".join(to_draw)
+
+
+class Plural:
+    def __init__(self, value):
+        self.value = value
+
+    def __format__(self, format_spec):
+        v = self.value
+        singular, _, pl = format_spec.partition('|')
+        pl = pl or f"{singular}s"
+        if abs(v) != 1:
+            return f"{v} {pl}"
+        return f"{v} {singular}"

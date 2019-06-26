@@ -26,17 +26,7 @@ class CommandHandler(commands.Cog):
 
         elif isinstance(exc, commands.DisabledCommand):
             await ctx.add_reaction(YAM_SAD)
-            await ctx.send(f"{ctx.command} has been disabled.")
-
-        elif isinstance(exc, commands.MissingPermissions):
-            perms = ", ".join(error.missing_perms)
-            await ctx.add_reaction(ARI_DERP)
-            await ctx.send(f"You lack the {perms} permission(s).")
-
-        elif isinstance(exc, commands.BotMissingPermissions):
-            perms = ", ".join(error.missing_perms)
-            await ctx.add_reaction(YAM_SAD)
-            await ctx.send(f"I lack the {perms} permission(s).")
+            await ctx.send(f"{ctx.command.qualified_name} has been disabled.")
 
         elif isinstance(exc, commands.NotOwner):
             await ctx.add_reaction(ARI_DERP)
@@ -46,7 +36,7 @@ class CommandHandler(commands.Cog):
             await ctx.add_reaction(ARI_DERP)
             await ctx.send(f"The command is currently on cooldown, retry in **{error.retry_after:.2f}** seconds.")
 
-        elif isinstance(exc, commands.UserInputError):
+        elif isinstance(exc, (commands.UserInputError, commands.BotMissingPermissions, commands.MissingPermissions)):
             await ctx.add_reaction(ARI_DERP)
             await ctx.send(str(exc))
 

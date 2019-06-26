@@ -1,5 +1,7 @@
+import argparse
 import inspect
 import re
+import shlex
 
 import parsedatetime
 from dateutil.relativedelta import relativedelta
@@ -255,3 +257,92 @@ class Codeblock(commands.Converter):
             return match.group(1), match.group(2)
 
         return match.group(2)
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise commands.BadArgument(message)
+
+
+class Flag:
+    def __init__(self, *, greedy=False, converter=None, aliases=None, required=False, consume=True, **kwargs):
+        self.greedy = greedy
+        self.converter = converter
+        self.aliases = aliases or []
+        self.required = required
+        self.consume = consume
+
+        self.kwargs = kwargs
+
+
+class EmptyArgs(dict):
+    def __getitem__(self, item):
+        return None
+
+
+class ShellFlags(commands.Converter):
+    def __init__(self, **kwargs):
+        self.flags = kwargs
+
+    async def convert(self, ctx, argument):
+        parser = Parser(add_help=False, allow_abbrev=False)
+
+        for name, flag in self.flags.items():
+            args = []
+            kwargs = {}
+
+            args.append(f"--{name}")
+            args.extend(flag.aliases)
+
+            if flag.greedy or flag.consume:
+                kwargs["nargs"] = "+"
+
+            kwargs.update(flag.kwargs)
+
+            parser.add_argument(*args, **kwargs)
+
+        parsed = parser.parse_args(shlex.split(argument))
+        ret = {}
+
+        for name, flag in self.flags.items():
+            arg = getattr(parsed, name)
+            if arg is None:
+                if flag.required:
+                    raise commands.BadArgument(f"Missing `--{name}` flag.")
+
+                if flag.greedy:
+                    ret[name] = []
+                else:
+                    ret[name] = None
+                continue
+
+            if flag.converter:
+                if inspect.isclass(flag.converter):
+                    conv = flag.converter()
+                else:
+                    conv = flag.converter
+
+                if flag.greedy:
+                    ar = []
+                    for k in arg:
+                        try:
+                            c = await conv.convert(ctx, k)
+                        except commands.BadArgument:
+                            break
+                        else:
+                            ar.append(c)
+
+                    ret[name] = ar
+                    continue
+
+                if flag.consume and arg:
+                    ret[name] = await conv.convert(ctx, " ".join(arg))
+                else:
+                    ret[name] = await conv.convert(ctx, arg)
+            else:
+                if flag.consume:
+                    ret[name] = " ".join(arg)
+                else:
+                    ret[name] = arg
+
+        return ret

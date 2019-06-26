@@ -1,10 +1,8 @@
 import asyncio
-import hashlib
 import itertools
 import logging
 import os
 import pathlib
-import re
 from collections import Counter
 from datetime import datetime
 
@@ -28,9 +26,13 @@ except KeyError:
 else:
     sentry_sdk.init(sentry_uri)
 
+NO_UVLOOP = frozenset({"win32", "cygwin"})
+
 
 class RightSiderContext(commands.Context):
-    __slots__ = ("pages",)
+    __slots__ = (
+        "pages",
+    )
 
     def __init__(self, **attrs):
         super().__init__(**attrs)
@@ -75,7 +77,7 @@ class TakuruBot(commands.Bot):
 
         super().__init__(command_prefix=self.get_custom_prefix,
                          activity=discord.Activity(type=discord.ActivityType.listening, name="positive delusions"),
-                         owner_id=371741730455814145)
+                         owner_id=371741730455814145, fetch_offline_members=True)
         self.init_time = INIT_TIME
 
         self.wavelink = wavelink.Client(self)
@@ -94,6 +96,7 @@ class TakuruBot(commands.Bot):
         self.redis = None
         self.ezr = None
         self.pokeapi = None
+        self.timers = None
         try:
             self.google_api_keys = itertools.cycle(config.tokens.apis.google_custom_search_api_keys)
             self.google = async_cse.Search(api_key=next(self.google_api_keys))
@@ -134,20 +137,6 @@ class TakuruBot(commands.Bot):
 
         return True
 
-    async def create_timer(self, name_, time_, **kwargs):
-        h = hashlib.sha256(":".join(f"{key}={value}" for key, value in kwargs.items()).encode()).hexdigest()
-        kwargs["name"] = name_
-
-        tr = self.redis.multi_exec()
-
-        tr.hmset_dict(f"timer-{name_}:{h}", **kwargs)
-        tr.hmset_dict(f"lookup-timer-{name_}:{h}", **kwargs)
-        tr.expire(f"timer-{name_}:{h}", int(time_))
-
-        await tr.execute()
-
-        LOG.info("Created timers with args %s, waiting %d seconds", kwargs, int(time_))
-
     async def on_ready(self):
         self.owner = self.get_user(self.owner_id)
 
@@ -180,6 +169,7 @@ class TakuruBot(commands.Bot):
             aioredis.create_redis_pool(**self.config.dbs.redis, loop=self.loop, encoding="utf-8"),
             timeout=20.0, loop=self.loop
         )
+        self.timers = utils.TimerManager(self)
 
         LOG.info("Connected to Redis")
         self.db = await asyncpg.create_pool(**self.config.dbs.psql, loop=self.loop)
@@ -199,11 +189,18 @@ class TakuruBot(commands.Bot):
         await super().login(*args, **kwargs)
 
     async def close(self):
-        await self.ezr.close()
-        await self.pokeapi.close()
-        await asyncio.wait_for(self.db.close(), timeout=20.0, loop=self.loop)
+        self.timers.close()
         self.redis.close()
-        await self.redis.wait_closed()
+
+        await asyncio.wait_for(
+            asyncio.gather(
+                self.ezr.close(),
+                self.pokeapi.close(),
+                self.db.close(),
+                self.redis.wait_closed(),
+                return_exceptions=True, loop=self.loop
+            ), timeout=20.0, loop=self.loop
+        )
 
         await super().close()
 
@@ -220,19 +217,6 @@ class TakuruBot(commands.Bot):
                 LOG.info("Successfully loaded %s", cog)
 
 
-class PresenceUpdateFilter(logging.Filter):
-    reg = re.compile("Dispatching event (socket_raw_receive|member_update|socket_response)")
-
-    def filter(self, record):
-        msg = record.getMessage()
-        if "{'t': 'PRESENCE_UPDATE'" in msg:
-            return False
-        if self.reg.match(msg):
-            return False
-
-        return True
-
-
 if __name__ == "__main__":
     INIT_TIME = datetime.utcnow()
 
@@ -242,13 +226,11 @@ if __name__ == "__main__":
                             datefmt="%Y-%m-%d %H:%M:%S", style="{")
     stream = logging.StreamHandler()
     stream.setFormatter(fmt)
-    stream.addFilter(PresenceUpdateFilter())
 
     files = logging.FileHandler(filename=f"pokecom/takuru{INIT_TIME}.log", mode="w", encoding="utf-8")
     files.setFormatter(fmt)
-    files.addFilter(PresenceUpdateFilter())
 
-    for name in ["utils.ezrequests", "cogs.nsfw", "discord", "takuru", "cogs.moderator"]:
+    for name in ["utils.ezrequests", "cogs.nsfw", "takuru", "cogs.moderator", "utils.timers"]:
         k = logging.getLogger(name)
         k.setLevel(logging.DEBUG)
         k.handlers = [files, stream]

@@ -55,6 +55,9 @@ class Jishaku(cog.Jishaku):
         if is_not_select:
             return await ctx.send(results)
 
+        if not results:
+            return await ctx.send("no results lol wtf")
+
         headers = list(results[0].keys())
         table = utils.Tabulator()
         table.set_columns(headers)

@@ -14,7 +14,7 @@ class FunStuff(commands.Cog, name="Fun",
     """Fun stuff, I think."""
 
     @commands.command(name="dog", aliases=["dogs", "doggos", "doggo"])
-    async def dogs(self, ctx, amount: Optional[lambda x: min(int(x), 50)] = 1):
+    async def dogs(self, ctx, amount: Optional[lambda x: min(int(x), 50)]=1):
         """Get a random dog image, up to 50 per command."""
         dogs = await ctx.get(f"https://dog.ceo/api/breeds/image/random/{amount}")
 
@@ -28,7 +28,7 @@ class FunStuff(commands.Cog, name="Fun",
 
     @commands.command(name="cat", aliases=["cats"])
     @utils.requires_config("tokens", "apis", "catapi")
-    async def cats(self, ctx, amount: Optional[lambda x: min(int(x), 100)] = 1):
+    async def cats(self, ctx, amount: Optional[lambda x: min(int(x), 100)]=1):
         """Get a random cat image, up to 100 per command."""
         headers = (("x-api-key", ctx.bot.config.tokens.apis.catapi),)
 
