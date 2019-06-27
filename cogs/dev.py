@@ -15,6 +15,7 @@ from lxml import etree
 from utils.checks import requires_config
 from utils.converters import Codeblock
 from utils.tio import Tio
+from utils import trunc_text
 
 try:
     import ujson as json
@@ -304,7 +305,7 @@ class DevUtils(commands.Cog, name="Dev Utils",
         )
         embed.set_author(name=data["info"]["author"])
         embed.description = data["info"]["summary"] or "No short description."
-        embed.add_field(name="Classifiers", value="\n".join(data["info"]["classifiers"]) or "No classifiers.")
+        embed.add_field(name="Classifiers", value=trunc_text("\n".join(data["info"]["classifiers"]), 460) or "No classifiers.")
         embed.set_footer(
             text=f"Latest: {data['info']['version']} |" f" Keywords: {data['info']['keywords'] or 'No keywords.'}"
         )
