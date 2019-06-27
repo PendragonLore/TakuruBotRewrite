@@ -6,6 +6,7 @@ import os
 import platform
 import time
 import typing
+from functools import partial
 from collections import Counter
 from datetime import datetime
 
@@ -189,21 +190,21 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
     @commands.command()
     async def techinfo(self, ctx):
         lines = ctx.bot.python_lines
-        nat = humanize.naturalsize
+        nat = partial(humanize.naturalsize, binary=True)
 
         py_fmt = (f"{platform.python_implementation()} {platform.python_version()} "
                   f"using discord.py {discord.__version__}"
                   f"\n{lines[0]} lines across {lines[1]} files")
 
-        total, used, free, _ = psutil.disk_usage("/")
+        total, used, free, perc = psutil.disk_usage("/")
 
         vem = psutil.virtual_memory()
 
         sys_fmt = (f"{platform.platform()}\nSystem has been up for "
-                   f"{utils.fmt_uptime(datetime.fromtimestamp(psutil.boot_time()) - datetime.utcnow())}\n"
+                   f"{utils.fmt_uptime(datetime.utcnow() - datetime.fromtimestamp(psutil.boot_time()))}\n"
                    f"{nat(vem.total)} total memory, "
-                   f"{nat(vem.used)} used and {nat(vem.free)} free\n"
-                   f"{nat(total)} total disk space, {nat(used)} used and {nat(free)} free")
+                   f"{nat(vem.used)} used ({vem.percent}%) and {nat(vem.free)} free\n"
+                   f"{nat(total)} total disk space, {nat(used)} used ({perc}%) and {nat(free)} free")
 
         embed = discord.Embed(color=discord.Color(0x008CFF), title="Technical information")
         embed.add_field(name="Python stats", value=py_fmt, inline=False)
@@ -256,7 +257,7 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
             location = module.replace(".", "/") + ".py"
             source_url = "https://github.com/Rapptz/discord.py"
 
-        final_url = f"<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>"
+        final_url = f"<{source_url}/blob/dev/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>"
         await ctx.send(final_url)
 
     @commands.command(name="serverinfo", aliases=["guildinfo"])
