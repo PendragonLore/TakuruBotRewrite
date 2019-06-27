@@ -6,9 +6,9 @@ import os
 import platform
 import time
 import typing
-from functools import partial
 from collections import Counter
 from datetime import datetime
+from functools import partial
 
 import discord
 import humanize

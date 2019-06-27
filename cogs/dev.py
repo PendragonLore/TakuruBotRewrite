@@ -12,10 +12,10 @@ import discord
 from discord.ext import commands
 from lxml import etree
 
+from utils import trunc_text
 from utils.checks import requires_config
 from utils.converters import Codeblock
 from utils.tio import Tio
-from utils import trunc_text
 
 try:
     import ujson as json
