@@ -23,6 +23,8 @@
       bitly: "",
       // https://saucenao.com/user.php?page=search-api
       saucenao: "",
+      // console.developers.google.com/apis/dashboard used for lavalink trackes metadata
+      yt_data: "",
       pixiv: {
         // Your pixiv email
         username: "",

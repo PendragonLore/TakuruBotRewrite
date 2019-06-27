@@ -18,6 +18,10 @@ class RightSiderContext(commands.Context):
     def db(self):
         return self.bot.db
 
+    @property
+    def player(self):
+        return self.bot.wavelink.get_player(self.guild.id, cls=utils.Player)
+
     async def paginate(self, *, embed: bool = True):
         await self.pages.paginate(embed=embed)
 

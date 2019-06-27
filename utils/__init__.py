@@ -8,8 +8,8 @@ from .emotes import *  # noqa: F401
 from .ezrequests import EasyRequests  # noqa: F401
 from .formats import PaginationError, Paginator, Plural, Tabulator  # noqa: F401
 from .timers import TimerManager  # noqa: F401
-from .waveobj import Player, Track  # noqa: F401
 from .context import RightSiderContext  # noqa: F401
+from .waveobj import Player, Track  # noqa: F401
 
 
 def fmt_delta(date):

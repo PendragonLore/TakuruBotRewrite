@@ -17,3 +17,11 @@ class FirstAttachment(flags.ParamDefault):
             return ctx.message.attachments[0].url
         except IndexError:
             raise commands.BadArgument("No attachment or argument provided.")
+
+
+class CurrentVoiceChannel(flags.ParamDefault):
+    async def default(self, ctx):
+        state = ctx.author.voice
+        if state is not None:
+            return state.channel
+        raise commands.BadArgument("Not connected to a voice channel and none provided.")

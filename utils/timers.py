@@ -52,7 +52,8 @@ class TimerManager(commands.Cog):
     async def after_fetch_timers(self):
         try:
             await self.bot.redis.unsubscribe(self._channel_fmt)
-        except (aioredis.PoolClosedError, RuntimeError):
+        except (aioredis.PoolClosedError, RuntimeError, aioredis.ConnectionForcedCloseError,
+                aioredis.ChannelClosedError, aioredis.ConnectionClosedError):
             pass
 
     async def create_timer(self, name_, time_, **kwargs):
@@ -65,9 +66,13 @@ class TimerManager(commands.Cog):
         tr.hmset_dict(f"lookup-timer-{name_}:{h}", **kwargs)
         tr.expire(f"timer-{name_}:{h}", int(time_))
 
-        await tr.execute()
-
-        LOG.info("Created timers with args %s, waiting %d seconds. SHA256: %s", kwargs, int(time_), h)
+        try:
+            ret = await tr.execute()
+        except aioredis.MultiExecError:
+            raise
+        else:
+            LOG.info("Created timers with args %s, waiting %d seconds. SHA256: %s", kwargs, int(time_), h)
+            return ret
 
     async def delete_timer(self, name_, **kwargs):
         h = self._gen_hash(kwargs)

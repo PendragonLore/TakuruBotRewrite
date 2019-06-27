@@ -154,6 +154,7 @@ class TakuruBot(commands.Bot):
                 self.pokeapi.close(),
                 self.db.close(),
                 self.redis.wait_closed(),
+                *[n.destroy() for n in self.wavelink.nodes.values()],
                 return_exceptions=True, loop=self.loop
             ), timeout=20.0, loop=self.loop
         )

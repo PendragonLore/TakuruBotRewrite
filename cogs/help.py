@@ -12,8 +12,7 @@ class Help(commands.Cog):
             show_hidden=False,
             aliases_heading="Aliases",
             command_attrs=dict(
-                cooldown=commands.Cooldown(1, 2.5, commands.BucketType.user),
-                hidden=True
+                cooldown=commands.Cooldown(1, 2.5, commands.BucketType.user)
             ),
             paginator=commands.Paginator(max_size=1000, prefix=None, suffix=None)
         )
