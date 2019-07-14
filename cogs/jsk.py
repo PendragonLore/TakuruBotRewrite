@@ -1,6 +1,11 @@
 import asyncio
+import importlib
+import pathlib
 import subprocess
+import sys
+import traceback
 
+from discord.ext import commands, ui
 from jishaku import cog
 from jishaku.exception_handling import ReplResponseReactor, attempt_add_reaction, do_after_sleep, send_traceback
 
@@ -56,7 +61,7 @@ class Jishaku(cog.Jishaku):
             return await ctx.send(results)
 
         if not results:
-            return await ctx.send("no results lol wtf")
+            return await ctx.send("no results")
 
         headers = list(results[0].keys())
         table = utils.Tabulator()
@@ -80,6 +85,69 @@ class Jishaku(cog.Jishaku):
             raise exc
         else:
             await ctx.add_reaction(KAZ_HAPPY)
+
+    def check_module(self, module):
+        if module.stem == "jsk":
+            return False
+        if module.stem.startswith("__"):
+            return False
+        if not module.suffix == ".py":
+            return False
+        return True
+
+    def fetch_modules(self):
+        utils_path = pathlib.Path("./utils")
+
+        for util in utils_path.iterdir():
+            if self.check_module(util):
+                yield (True, f"{util.parent}.{util.stem}")
+
+        cog_path = pathlib.Path("./cogs")
+
+        for ext in cog_path.iterdir():
+            if self.check_module(ext):
+                yield (False, f"{ext.parent}.{ext.stem}")
+
+    def reload_or_load_ext(self, module):
+        try:
+            self.bot.reload_extension(module)
+        except commands.ExtensionNotLoaded:
+            self.bot.load_extension(module)
+
+    @jsk.command(name="reload-all")
+    async def jsk_reload_all(self, ctx):
+        try:
+            resp = await ui.prompt(ctx, "Ya sure?", timeout=10)
+        except asyncio.TimeoutError:
+            return await ctx.send("Not doing it then.")
+        else:
+            if not resp.lower() == "ye":
+                return await ctx.send("Not doing it then.")
+
+        status = []
+        for is_util, module in self.fetch_modules():
+            if is_util:
+                try:
+                    actual = sys.modules[module]
+                except KeyError:
+                    status.append(f"\U0000274c **{module}**")
+                else:
+                    try:
+                        importlib.reload(actual)
+                    except Exception:
+                        status.append(f"\U0000274c **{module}**")
+                        traceback.print_exc()
+                    else:
+                        status.append(f"\U00002705 **{module}**")
+            else:
+                try:
+                    self.reload_or_load_ext(module)
+                except commands.ExtensionError:
+                    status.append(f"\U0000274c **{module}**")
+                else:
+                    status.append(f"\U00002705 **{module}**")
+
+        await self.bot.owner.send("\n".join(status))
 
 
 def setup(bot):

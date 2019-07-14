@@ -221,7 +221,7 @@ class DevUtils(commands.Cog, name="Dev Utils",
 
         Most programming languages are supported."""
         lang = self.tio_quickmap.get(lang, lang)
-        lang = self.tio_not_quickmap(lang, lang)
+        lang = self.tio_not_quickmap.get(lang, lang)
 
         runner = Tio(ctx, lang, code)
 
@@ -305,7 +305,9 @@ class DevUtils(commands.Cog, name="Dev Utils",
         )
         embed.set_author(name=data["info"]["author"])
         embed.description = data["info"]["summary"] or "No short description."
-        embed.add_field(name="Classifiers", value=trunc_text("\n".join(data["info"]["classifiers"]), 460) or "No classifiers.")
+        embed.add_field(name="Classifiers", value=trunc_text(
+            "\n".join(data["info"]["classifiers"]), 460) or "No classifiers."
+                        )
         embed.set_footer(
             text=f"Latest: {data['info']['version']} |" f" Keywords: {data['info']['keywords'] or 'No keywords.'}"
         )
@@ -314,16 +316,14 @@ class DevUtils(commands.Cog, name="Dev Utils",
         await ctx.send(embed=embed)
 
     @commands.command(name="rtfs", aliases=["rts", "readthesource", "readthefuckingsourcegoddamnit"])
-    async def read_the_source(self, ctx, *, query: typing.Optional[str] = None):
+    async def read_the_source(self, ctx, *, query=None):
         """Search the GitHub repo of discord.py."""
         if not query:
             return await ctx.send("https://github.com/Rapptz/discord.py")
 
         source = await ctx.get("https://rtfs.eviee.host/dpy/v1", search=query, limit=12)
-        thing = []
-
-        for result in source["results"]:
-            thing.append(f"[{result['path'].replace('/', '.')}.{result['module']}.{result['object']}]({result['url']})")
+        thing = [f"[{result['path'].replace('/', '.')}.{result['module']}.{result['object']}]({result['url']})"
+                 for result in source["results"]]
 
         if not thing:
             return await ctx.send("No results.")

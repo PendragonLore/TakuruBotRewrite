@@ -1,23 +1,33 @@
+import itertools
+
 import humanize
 
 from .checks import *  # noqa: F401
 from .config import Config  # noqa: F401
+from .context import RightSiderContext  # noqa: F401
 from .converters import *  # noqa: F401
 from .defaults import *  # noqa: F401
 from .emotes import *  # noqa: F401
 from .ezrequests import EasyRequests  # noqa: F401
 from .formats import PaginationError, Paginator, Plural, Tabulator  # noqa: F401
 from .timers import TimerManager  # noqa: F401
-from .context import RightSiderContext  # noqa: F401
 from .waveobj import Player, Track  # noqa: F401
+from .nsfw_parser import NSFWParser, Node
+
+
+async def aioenumerate(iterator, start=0, step=1):
+    counter = itertools.count(start=start, step=step)
+
+    async for x in iterator:
+        yield (next(counter), x)
 
 
 def fmt_delta(date):
     return f"{humanize.naturaldate(date)} UTC ({humanize.naturaltime(date)})"
 
 
-def trunc_text(text, maxlen):
-    return text[:maxlen - 3] + "..." if len(text) > maxlen else text
+def trunc_text(text, maxlen, *, placeholder="..."):
+    return text[:maxlen - len(placeholder)] + placeholder if len(text) > maxlen else text
 
 
 def make_seed(string):

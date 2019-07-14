@@ -23,7 +23,7 @@ class RightSiderContext(commands.Context):
         return self.bot.wavelink.get_player(self.guild.id, cls=utils.Player)
 
     async def paginate(self, *, embed: bool = True):
-        await self.pages.paginate(embed=embed)
+        return await self.pages.paginate(embed=embed)
 
     async def _request(self, __method: str, __url: str, **params):
         return await self.bot.ezr.request(__method, __url, **params)

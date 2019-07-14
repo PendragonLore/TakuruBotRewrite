@@ -1,4 +1,7 @@
+import math
+import datetime
 import traceback
+import inspect
 
 import discord
 import sentry_sdk
@@ -6,10 +9,13 @@ from discord.ext import commands
 
 from utils.emotes import ARI_DERP, YAM_SAD
 from utils.ezrequests import WebException
-from utils.formats import PaginationError
+from utils.formats import PaginationError, Plural
 
 
 class CommandHandler(commands.Cog):
+    def __init__(self, bot):
+        self.wh = discord.Webhook.from_url(bot.config.wh_url, adapter=discord.AsyncWebhookAdapter(bot.ezr.session))
+
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
@@ -34,9 +40,24 @@ class CommandHandler(commands.Cog):
 
         elif isinstance(exc, commands.CommandOnCooldown):
             await ctx.add_reaction(ARI_DERP)
-            await ctx.send(f"The command is currently on cooldown, retry in **{error.retry_after:.2f}** seconds.")
+            await ctx.send(f"The command is currently on cooldown, retry in **{error.retry_after:.2f} seconds**.",
+                           delete_after=math.ceil(error.retry_after))
 
-        elif isinstance(exc, (commands.UserInputError, commands.BotMissingPermissions, commands.MissingPermissions)):
+        elif isinstance(error, commands.MissingPermissions):
+            await ctx.add_reaction(ARI_DERP)
+
+            perms, fmt = self.fmt_perms(error)
+
+            await ctx.send(f"You lack the {perms} {fmt}.")
+
+        elif isinstance(error, commands.BotMissingPermissions):
+            await ctx.add_reaction(YAM_SAD)
+
+            perms, fmt = self.fmt_perms(error)
+
+            await ctx.send(f"I lack the {perms} {fmt}.")
+
+        elif isinstance(exc, commands.UserInputError):
             await ctx.add_reaction(ARI_DERP)
             await ctx.send(str(exc))
 
@@ -60,25 +81,43 @@ class CommandHandler(commands.Cog):
 
         else:
             if ctx.bot.sentry:
-                with sentry_sdk.push_scope() as scope:
-                    scope.set_tag("guild", f"{ctx.guild} ({ctx.guild.id})")
-                    scope.set_tag("channel", f"#{ctx.channel} ({ctx.guild.id})")
-                    scope.set_tag("command", ctx.command.qualified_name)
-                    scope.set_tag("author", f"{ctx.author} ({ctx.author.id})")
-                    sentry_sdk.capture_exception(exc)
-            traceback.print_exception(type(error), error, error.__traceback__)
+                def push_to_sentry():
+                    with sentry_sdk.push_scope() as scope:
+                        scope.set_tag("guild", f"{ctx.guild} ({ctx.guild.id})")
+                        scope.set_tag("channel", f"#{ctx.channel} ({ctx.channel.id})")
+                        scope.set_tag("command", ctx.command.qualified_name)
+                        scope.set_tag("author", f"{ctx.author} ({ctx.author.id})")
+                        sentry_sdk.capture_exception(exc)
 
-            stack = 8
-            traceback_text = traceback.format_exception(type(error), error, error.__traceback__, stack)
-            paginator = commands.Paginator(prefix="```py", suffix="```", max_size=1990)
+                ctx.bot.loop.run_in_executor(None, push_to_sentry)
 
-            for page in traceback_text:
-                paginator.add_line(page.lstrip(" \n"))
+            traceback.print_exception(type(exc), exc, exc.__traceback__)
 
-            for page in paginator.pages:
-                await ctx.bot.owner.send(page)
+            stack = 6
+            traceback_text = traceback.format_exception(type(exc), exc, exc.__traceback__, stack)
+
+            embed = discord.Embed(title="Command Error", timestamp=datetime.datetime.utcnow(),
+                                  color=discord.Color.red())
+
+            embed.add_field(name="Traceback", value="```py\n" + "".join(traceback_text) + "```")
+            embed.add_field(name="Metadata", value=(f"**Command**: `{ctx.command.qualified_name}`\n"
+                                                    f"**Guild**: `{ctx.guild.id}`\n"
+                                                    f"**Channel**: `{ctx.channel.id}`\n"
+                                                    f"**Author**: `{ctx.author.id}`"))
+
+            actual = ctx.args + list(ctx.kwargs.values())
+            args = "\n".join([f"**{k}** = `{v}`" for k, v in
+                              zip(inspect.signature(ctx.command.callback).parameters.keys(), actual)])
+            embed.add_field(name="Args", value=f"{args}")
+            await self.wh.send(embed=embed)
 
         # await ctx.send(f"An uncaught error occured in {ctx.command}")
+
+    def fmt_perms(self, error):
+        p = ", ".join([x.replace("_", " ") for x in error.missing_perms])
+        f = format(Plural(len(error.missing_perms)), "permission").lstrip(" 0123456789")
+
+        return p, f
 
 
 def setup(bot):

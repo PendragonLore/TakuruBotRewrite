@@ -1,5 +1,5 @@
 import asyncio
-import functools
+import inspect
 
 import discord
 from discord.ext import commands
@@ -7,6 +7,15 @@ from discord.ext import commands
 
 class PaginationError(Exception):
     pass
+
+
+def emote(emoji):
+    def wrapper(func):
+        func.__paginator_emote__ = emoji
+
+        return func
+
+    return wrapper
 
 
 class Paginator:
@@ -23,6 +32,7 @@ class Paginator:
         "paginating",
         "current",
         "reactions",
+        "_task"
     )
 
     def __init__(self, ctx):
@@ -39,15 +49,11 @@ class Paginator:
         self.paginating = True
         self.current = 0
 
-        part = functools.partial(self.stop, delete=True)
-        part.__doc__ = self.stop.__doc__
+        self._task = None
 
-        self.reactions = [
-            ("\N{BLACK LEFT-POINTING TRIANGLE}", self.backward),
-            ("\N{BLACK RIGHT-POINTING TRIANGLE}", self.forward),
-            ("\N{BLACK SQUARE FOR STOP}", part),
-            ("\N{INFORMATION SOURCE}", self.info),
-        ]
+        self.reactions = [(func.__paginator_emote__, func)
+                          for name, func in inspect.getmembers(self, inspect.ismethod) if
+                          hasattr(func, "__paginator_emote__")]
 
     def add_entry(self, entry):
         self.entries.append(entry)
@@ -55,16 +61,6 @@ class Paginator:
     PAGINATION_PERMS = frozenset({"add_reaction", "embed_links", "read_message_history"})
 
     async def setup(self):
-        perms = self.channel.permissions_for(self.ctx.me)
-        missing = [perm for perm, value in perms
-                   if perm in self.PAGINATION_PERMS and not value]
-        if missing:
-            raise commands.BotMissingPermissions(missing)
-
-        if not self.entries:
-            e = PaginationError("No pagination entries.")
-            raise commands.CommandInvokeError(e) from e
-
         if not self.embed:
             self.entries = [entry + f"\n\nPage {page} of {len(self.entries)}"
                             for page, entry in enumerate(self.entries, 1)]
@@ -94,6 +90,7 @@ class Paginator:
         except (AttributeError, TypeError):
             await self.msg.edit(content=self.entries[page])
 
+    @emote("\N{BLACK LEFT-POINTING TRIANGLE}")
     async def backward(self):
         """takes you to the previous page or the last if used on the first one."""
         if self.current == 0:
@@ -103,6 +100,7 @@ class Paginator:
             self.current -= 1
             await self.alter(self.current)
 
+    @emote("\N{BLACK RIGHT-POINTING TRIANGLE}")
     async def forward(self):
         """takes you to the next page or the first if used on the last one."""
         if self.current == self.max_pages:
@@ -112,7 +110,8 @@ class Paginator:
             self.current += 1
             await self.alter(self.current)
 
-    async def stop(self, *, delete=False):
+    @emote("\N{BLACK SQUARE FOR STOP}")
+    async def stop(self, *, delete=True):
         """stops the paginator session."""
         try:
             if delete:
@@ -123,13 +122,12 @@ class Paginator:
             pass
         finally:
             self.paginating = False
+            self._task.cancel()
 
+    @emote("\N{INFORMATION SOURCE}")
     async def info(self):
         """shows this page."""
-        fmt = []
-
-        for emoji, func in self.reactions:
-            fmt.append(f"{emoji} {func.__doc__}")
+        fmt = [f"{emoji} {func.__doc__}" for emoji, func in self.reactions]
 
         if not self.embed:
             fmt.insert(0, "**Instructions**\n"
@@ -165,8 +163,23 @@ class Paginator:
         return False
 
     async def paginate(self, *, embed: bool = True):
+        perms = self.channel.permissions_for(self.ctx.me)
+        missing = [perm for perm, value in perms
+                   if perm in self.PAGINATION_PERMS and not value]
+        if missing:
+            raise commands.BotMissingPermissions(missing)
+
+        if not self.entries:
+            e = PaginationError("No pagination entries.")
+            raise commands.CommandInvokeError(e) from e
+
         self.embed = embed
 
+        self._task = self.bot.loop.create_task(self._do_pagination())
+
+        return self
+
+    async def _do_pagination(self):
         await self.setup()
 
         while self.paginating:
@@ -180,13 +193,16 @@ class Paginator:
 
             try:
                 done.pop().result()
-            except (discord.HTTPException, asyncio.TimeoutError, KeyError):
-                return await self.stop()
+            except Exception:
+                return await self.stop(delete=False)
 
             for future in pending:
                 future.cancel()
 
-            await self.execute()
+            try:
+                await self.execute()
+            except discord.HTTPException:
+                await self.stop(delete=False)
 
 
 class Tabulator:

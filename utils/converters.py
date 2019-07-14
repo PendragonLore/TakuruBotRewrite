@@ -4,8 +4,38 @@ import re
 import shlex
 
 import parsedatetime
+import wavelink
 from dateutil.relativedelta import relativedelta
 from discord.ext import commands
+
+import utils
+
+
+class TrackConverter(commands.Converter):
+    URL_REGEX = re.compile(r"https?://(www\.)?[-a-zA-Z0-9@:%._+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_+.~#?&/=]*)")
+
+    def __init__(self, *, list_ok=False, url_ok=True):
+        self.list_ok = list_ok
+        self.url_ok = url_ok
+
+    async def convert(self, ctx, argument):
+        if self.URL_REGEX.match(argument) and self.url_ok:
+            tracks = await ctx.bot.wavelink.get_tracks(argument.strip("<>"))
+        else:
+            tracks = await ctx.bot.wavelink.get_tracks(f"ytsearch:{argument}")
+
+        if not tracks:
+            raise commands.BadArgument("No tracks found.")
+
+        if isinstance(tracks, wavelink.TrackPlaylist):
+            tracks.tracks = [utils.Track(id_=t.id, info=t.info, ctx=ctx, query=argument) for t in tracks.tracks]
+        else:
+            tracks = [utils.Track(id_=t.id, info=t.info, ctx=ctx, query=argument) for t in tracks]
+
+        if not self.list_ok:
+            return tracks[0] if isinstance(tracks, list) else tracks
+
+        return tracks
 
 
 class Empty:

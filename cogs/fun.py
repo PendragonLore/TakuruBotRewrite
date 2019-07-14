@@ -2,7 +2,6 @@ import random
 from typing import Optional
 
 import discord
-import numpy
 from discord.ext import commands
 
 import utils
@@ -13,8 +12,36 @@ class FunStuff(commands.Cog, name="Fun",
                command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, commands.BucketType.user))):
     """Fun stuff, I think."""
 
+    CHARS_MAP = {'a': ':regional_indicator_a:', 'b': ':regional_indicator_b:', 'c': ':regional_indicator_c:',
+                 'd': ':regional_indicator_d:', 'e': ':regional_indicator_e:', 'f': ':regional_indicator_f:',
+                 'g': ':regional_indicator_g:', 'h': ':regional_indicator_h:', 'i': ':regional_indicator_i:',
+                 'j': ':regional_indicator_j:', 'k': ':regional_indicator_k:', 'l': ':regional_indicator_l:',
+                 'm': ':regional_indicator_m:', 'n': ':regional_indicator_n:', 'o': ':regional_indicator_o:',
+                 'p': ':regional_indicator_p:', 'q': ':regional_indicator_q:', 'r': ':regional_indicator_r:',
+                 's': ':regional_indicator_s:', 't': ':regional_indicator_t:', 'u': ':regional_indicator_u:',
+                 'v': ':regional_indicator_v:', 'w': ':regional_indicator_w:', 'x': ':regional_indicator_x:',
+                 'y': ':regional_indicator_y:', 'z': ':regional_indicator_z:', '1': ':one:', '2': ':two:',
+                 '3': ':three:', '4': ':four:', '5': ':five:', '6': ':six:', '7': ':seven:', '8': ':eight:',
+                 '9': ':nine:', "#": ":hash:", "*": ":asterisk:"}
+
+    @commands.command(name="emojitext")
+    async def emojitext(self, ctx, *, text: commands.clean_content(fix_channel_mentions=True)):
+        actual = []
+
+        for char in text:
+            maybe_emote = self.CHARS_MAP.get(char.lower())
+
+            if maybe_emote is None:
+                actual.append(char)
+            else:
+                actual.append(maybe_emote + "\u200b")
+        try:
+            await ctx.send("".join(actual))
+        except discord.HTTPException:
+            await ctx.send("Content too long, sorry.")
+
     @commands.command(name="dog", aliases=["dogs", "doggos", "doggo"])
-    async def dogs(self, ctx, amount: Optional[lambda x: min(int(x), 50)]=1):
+    async def dogs(self, ctx, amount: Optional[lambda x: min(int(x), 50)] = 1):
         """Get a random dog image, up to 50 per command."""
         dogs = await ctx.get(f"https://dog.ceo/api/breeds/image/random/{amount}")
 
@@ -28,7 +55,7 @@ class FunStuff(commands.Cog, name="Fun",
 
     @commands.command(name="cat", aliases=["cats"])
     @utils.requires_config("tokens", "apis", "catapi")
-    async def cats(self, ctx, amount: Optional[lambda x: min(int(x), 100)]=1):
+    async def cats(self, ctx, amount: Optional[lambda x: min(int(x), 100)] = 1):
         """Get a random cat image, up to 100 per command."""
         headers = (("x-api-key", ctx.bot.config.tokens.apis.catapi),)
 
@@ -81,28 +108,14 @@ class FunStuff(commands.Cog, name="Fun",
 
     @commands.command()
     async def rate(self, ctx, *, thing: commands.clean_content):
+        """Make the bot rate something."""
         random.seed(utils.make_seed(thing))
 
         await ctx.send(f"I rate `{thing}` a **{random.randint(0, 10)} out of 10**.")
 
     @commands.command()
-    async def owoify(self, ctx, *, text: commands.clean_content):
-        """Owoify some text ~~*send help*~~."""
-        owo_chars = ["w", "u", "owo", "uwu", "nya"]
-        chars = []
-
-        for x in text:
-            if not x.strip():
-                chars.append(x)
-            else:
-                chars.append(numpy.random.choice([x, random.choice(owo_chars)], replace=True,
-                                                 p=[0.85, 0.15]))
-        owod = "".join(chars)
-        await ctx.send(owod)
-
-    @commands.command()
     async def mock(self, ctx, *, text: commands.clean_content):
-        """Mock text."""
+        """Mock."""
         mocked = "".join(random.choice([m.upper(), m.lower()]) for m in text)
 
         await ctx.send(f"{POPULAR} *{mocked}* {POPULAR}")

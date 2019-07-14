@@ -12,9 +12,16 @@ class CurrentTextChannel(flags.ParamDefault):
 
 
 class FirstAttachment(flags.ParamDefault):
+    def __init__(self, with_filename=False):
+        self.with_name = with_filename
+
     async def default(self, ctx):
         try:
-            return ctx.message.attachments[0].url
+            att = ctx.message.attachments[0]
+
+            if self.with_name:
+                return att.url, att.filename
+            return att.url
         except IndexError:
             raise commands.BadArgument("No attachment or argument provided.")
 

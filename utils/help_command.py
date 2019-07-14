@@ -1,3 +1,4 @@
+import functools
 import textwrap
 
 from jishaku.help_command import MinimalPaginatorHelp
@@ -8,8 +9,17 @@ class TakuruHelpCommand(MinimalPaginatorHelp):
         return f"`{self.clean_prefix}{command.qualified_name} {command.signature}`"
 
     def add_subcommand_formatting(self, command):
-        fmt = f"{command.qualified_name} - {command.short_doc}" if command.short_doc else command.qualified_name
+        indent = functools.partial(textwrap.indent, prefix=" " * self.recursive_indent(command))
+        fmt = indent(f"{command.qualified_name} - {command.short_doc}") \
+            if command.short_doc else indent(command.qualified_name)
         self.paginator.add_line(fmt)
+
+    def recursive_indent(self, command):
+        total = 0
+        while command.parent:
+            command = command.parent
+            total += 2
+        return total
 
     def add_bot_commands_formatting(self, commands, heading):
         if commands:
@@ -41,7 +51,8 @@ class TakuruHelpCommand(MinimalPaginatorHelp):
         if note:
             self.paginator.add_line(note, empty=True)
 
-        filtered = await self.filter_commands(cog.get_commands(), sort=self.sort_commands)
+        filtered = await self.filter_commands(self.unique_walk_commands(cog), sort=self.sort_commands,
+                                              key=self.recursive_indent)
         if filtered:
             self.paginator.add_line(f"**{cog.qualified_name} {self.commands_heading}**", empty=True)
             if cog.description:
@@ -52,6 +63,9 @@ class TakuruHelpCommand(MinimalPaginatorHelp):
 
         await self.send_pages()
 
+    def unique_walk_commands(self, thing):
+        yield from set(thing.walk_commands())
+
     async def send_group_help(self, group):
         note = self.get_opening_note()
         if note:
@@ -59,7 +73,8 @@ class TakuruHelpCommand(MinimalPaginatorHelp):
 
         self.add_command_formatting(group)
 
-        filtered = await self.filter_commands(group.commands, sort=self.sort_commands)
+        filtered = await self.filter_commands(self.unique_walk_commands(group),
+                                              sort=self.sort_commands, key=self.recursive_indent)
         if filtered:
             self.paginator.add_line(f"**{self.commands_heading}**")
             for command in filtered:

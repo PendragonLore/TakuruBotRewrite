@@ -3,13 +3,6 @@ from discord.ext import commands
 from utils.emotes import FESTIVE, KAZ_HAPPY
 
 
-class Prefix(commands.clean_content):
-    async def convert(self, ctx, argument):
-        pre = await super().convert(ctx, argument)
-
-        return pre + " "
-
-
 class Owner(commands.Cog):
     """Owner only commands."""
 

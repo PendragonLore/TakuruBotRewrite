@@ -1,7 +1,10 @@
 import functools
+import math
 import operator
 
 from discord.ext import commands
+
+import utils
 
 
 def bot_and_author_have_permissions(**perms):
@@ -52,6 +55,50 @@ def requires_config(*args):
 
         if not k:
             raise commands.BadArgument("Command cannot be used due to the lack of a config entry.")
+        return True
+
+    return commands.check(predicate)
+
+
+def if_no_perms_then_vote(vote_name, string):
+    async def inner(ctx):
+        if ctx.invoked_with == "help":
+            return True
+
+        if not ctx.player.check_perms(ctx):
+            if not ctx.author.voice or ctx.author not in ctx.me.voice.channel.members:
+                raise commands.BadArgument("You can't vote.")
+            votes = getattr(ctx.player, vote_name)
+
+            no_bots = {x for x in ctx.author.voice.channel.members}
+            necessary_votes = math.ceil(len(no_bots) / 2)
+
+            print(len(votes), necessary_votes, no_bots)
+
+            if ctx.author in votes:
+                raise commands.BadArgument("You already voted.")
+
+            votes.add(ctx.author)
+
+            if necessary_votes <= len(votes):
+                votes.clear()
+                return True
+
+            raise commands.BadArgument(string.format(thing=f"{'resume' if ctx.player.paused else 'pause'}") +
+                                       f"\n{utils.Plural(necessary_votes - len(votes)):vote} remaining.")
+
+        return True
+
+    return commands.check(inner)
+
+
+def player_perms_check():
+    def predicate(ctx):
+        if ctx.invoked_with == "help":
+            return True
+        if not ctx.player.check_perms(ctx):
+            raise commands.BadArgument("Only the owner of the player, moderators and admins can use this command.")
+
         return True
 
     return commands.check(predicate)

@@ -46,7 +46,7 @@ class TakuruBot(commands.Bot):
 
         self.http_headers = {"User-Agent": "Python/aiohttp"}
 
-        self.init_cogs = [f"cogs.{ext.stem}" for ext in pathlib.Path("cogs/").glob("*.py")]
+        self.init_cogs = [f"{ext.parent}.{ext.stem}" for ext in pathlib.Path("cogs").glob("*.py")]
 
         self.db = None
         self.redis = None
@@ -133,6 +133,7 @@ class TakuruBot(commands.Bot):
 
         self.pokeapi = await async_pokepy.connect(loop=self.loop)
         self.ezr = await utils.EasyRequests.start(self)
+
         LOG.info("Finished setting up API stuff")
 
         async with self.db.acquire() as db:
@@ -144,20 +145,56 @@ class TakuruBot(commands.Bot):
 
         await super().login(*args, **kwargs)
 
+    def run(self, *args, **kwargs):
+        loop = self.loop
+
+        try:
+            loop.run_until_complete(bot.start(*args, **kwargs))
+        except KeyboardInterrupt:
+            loop.run_until_complete(bot.close())
+        finally:
+            self._do_cleanup()
+
+    def _do_cleanup(self):
+        loop = self.loop
+
+        tasks = [x for x in asyncio.all_tasks(loop=loop) if not x.done()]
+
+        LOG.info(f"Cleaning up %d tasks.", len(tasks))
+
+        for task in tasks:
+            task.cancel()
+
+        loop.run_until_complete(
+            asyncio.gather(
+                # avoid shitty tcp ws timeout
+                *[x for x in tasks if not x._coro.__name__ == "close_connection"],
+                return_exceptions=True, loop=loop)
+        )
+
+        loop.run_until_complete(loop.shutdown_asyncgens())
+
+        LOG.info("Finished cleaning up.")
+
+        loop.close()
+
+        LOG.info("Bot closed completely.")
+
     async def close(self):
         self.timers.close()
         self.redis.close()
 
-        await asyncio.wait_for(
-            asyncio.gather(
+        done, pending = await asyncio.wait(
+            [
                 self.ezr.close(),
                 self.pokeapi.close(),
                 self.db.close(),
                 self.redis.wait_closed(),
+                *[p.destroy() for p in self.wavelink.players.values()],
                 *[n.destroy() for n in self.wavelink.nodes.values()],
-                return_exceptions=True, loop=self.loop
-            ), timeout=20.0, loop=self.loop
-        )
+            ], timeout=10.0, loop=self.loop, return_when=asyncio.ALL_COMPLETED)
+
+        LOG.info("%r cleanup tasks done, %r pending.", len(done), len(pending))
 
         await super().close()
 
@@ -187,7 +224,7 @@ if __name__ == "__main__":
     files = logging.FileHandler(filename=f"pokecom/takuru{INIT_TIME}.log", mode="w", encoding="utf-8")
     files.setFormatter(fmt)
 
-    for name in ["utils.ezrequests", "cogs.nsfw", "takuru", "cogs.moderator", "utils.timers"]:
+    for name in ["utils.ezrequests", "cogs.nsfw", "takuru", "cogs.moderator", "utils.timers", "wavelink"]:
         k = logging.getLogger(name)
         k.setLevel(logging.DEBUG)
         k.handlers = [files, stream]
@@ -195,4 +232,4 @@ if __name__ == "__main__":
     bot = TakuruBot()
     bot.loop.set_debug(True)
 
-    bot.run(bot.config.tokens.discord.kurusu)
+    bot.run(bot.config.tokens.discord.kurusu, reconnect=True)

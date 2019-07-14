@@ -24,23 +24,21 @@ class TimerManager(commands.Cog):
     async def fetch_timers(self):
         key = await self.channel.get(encoding="utf-8")
 
-        if not key or not key.startswith("timer-"):
-            self.fetch_timers.restart()
+        if key and str(key).startswith("timer-"):
+            tr = self.bot.redis.multi_exec()
 
-        tr = self.bot.redis.multi_exec()
+            tr.hgetall(f"lookup-{key}")
+            tr.delete(f"lookup-{key}")
 
-        tr.hgetall(f"lookup-{key}")
-        tr.delete(f"lookup-{key}")
+            kwargs, _ = await tr.execute()
 
-        kwargs, _ = await tr.execute()
-
-        try:
-            name = kwargs.pop("name")
-        except KeyError:
-            LOG.warning("Timer with args %s doesn't have a name field, discarding.", kwargs)
-        else:
-            LOG.info("Dispatching timer %s with args %s. SHA256: %s", name, kwargs, key.split(":")[-1])
-            self.bot.dispatch(f"{name}_complete", kwargs)
+            try:
+                name = kwargs.pop("name")
+            except KeyError:
+                LOG.warning("Timer with args %s doesn't have a name field, discarding.", kwargs)
+            else:
+                LOG.info("Dispatching timer %s with args %s. SHA256: %s", name, kwargs, key.split(":")[-1])
+                self.bot.dispatch(f"{name}_complete", kwargs)
 
     @fetch_timers.before_loop
     async def before_fetch_timers(self):
@@ -63,7 +61,7 @@ class TimerManager(commands.Cog):
         tr = self.bot.redis.multi_exec()
 
         tr.hmset_dict(f"timer-{name_}:{h}", **kwargs)
-        tr.hmset_dict(f"lookup-timer-{name_}:{h}", **kwargs)
+        tr.hmset_dict(f"timer-lookup-{name_}:{h}", **kwargs)
         tr.expire(f"timer-{name_}:{h}", int(time_))
 
         try:

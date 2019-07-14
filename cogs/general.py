@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import io
 # UJSON DOESN'T PRETTIFY WELL REEEE
@@ -15,6 +16,7 @@ import humanize
 import psutil
 from discord.ext import commands, flags
 from jishaku.paginators import PaginatorInterface, WrappedPaginator
+from jishaku.shell import ShellReader
 
 import utils
 
@@ -76,8 +78,9 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
             activity_type = member.activity.type.name.capitalize()
             embed.add_field(name=activity_type, value=member.activity.name)
         if member.roles[1:]:
-            roles = " ".join(role.mention for role in reversed(member.roles[1:20]))
-            embed.add_field(name="Roles", value=f"{roles}{'...' if len(member.roles) > 20 else ''}")
+            roles = " ".join(role.mention for role in reversed(member.roles[1:15]))
+            ex = f"... ({len(member.roles) - 15} entries omitted)" if len(member.roles) > 15 else ''
+            embed.add_field(name="Roles", value=f"{roles} {ex}")
 
         embed.add_field(
             name="Status",
@@ -87,6 +90,13 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
         )
 
         await ctx.send(embed=embed)
+
+    @commands.command(name="roleinfo")
+    async def roleinfo(self, ctx, *, role: discord.Role):
+        embed = discord.Embed(color=role.color, timestamp=role.created_at)
+        embed.set_author(name=ctx.author, icon_url=ctx.author.avatar_url)
+
+        embed.set_footer(text="Role created at")
 
     async def do_perms(self, ctx, iterable, color):
         def fmt(arg: str):
@@ -126,18 +136,19 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
     @commands.command(name="invite")
     async def invite(self, ctx):
         """Send an invite for the bot."""
-        await ctx.send(discord.utils.oauth_url(ctx.bot.user.id, permissions=discord.Permissions(37055814)))
+        invite = discord.utils.oauth_url(ctx.bot.user.id, permissions=discord.Permissions(37055814))
+        await ctx.send(f"<{invite}>")
 
     @commands.command(name="avatar", aliases=["av", "pfp"], cls=flags.FlagCommand)
     async def avatar_url(self, ctx, member: typing.Optional[discord.Member] = utils.Author):
         """Get yours or some mentioned users' profile picture."""
         a = member.avatar_url_as
 
-        png = a(format="png", size=1024)
-        jpeg = a(format="jpeg", size=1024)
-        webp = a(format="webp", size=1024)
+        png = a(format="png")
+        jpeg = a(format="jpeg")
+        webp = a(format="webp")
 
-        gif = a(format="gif", size=1024) if member.is_avatar_animated() else None
+        gif = a(format="gif") if member.is_avatar_animated() else None
 
         embed = discord.Embed(
             color=discord.Color(0x008CFF),
@@ -201,7 +212,7 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
         vem = psutil.virtual_memory()
 
         sys_fmt = (f"{platform.platform()}\nSystem has been up for "
-                   f"{utils.fmt_uptime(datetime.utcnow() - datetime.fromtimestamp(psutil.boot_time()))}\n"
+                   f"{utils.fmt_uptime(datetime.fromtimestamp(psutil.boot_time()) - datetime.utcnow())}\n"
                    f"{nat(vem.total)} total memory, "
                    f"{nat(vem.used)} used ({vem.percent}%) and {nat(vem.free)} free\n"
                    f"{nat(total)} total disk space, {nat(used)} used ({perc}%) and {nat(free)} free")
@@ -263,8 +274,8 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
     @commands.command(name="serverinfo", aliases=["guildinfo"])
     async def guild_info(self, ctx):
         """Get some of this guild's information."""
-        guild: discord.Guild = ctx.guild
-        embed = discord.Embed(color=discord.Color(0x008CFF), title=f"{guild} - {guild.id}")
+        guild = ctx.guild
+        embed = discord.Embed(color=discord.Color(0x008CFF), title=f"{guild} - {guild.id}", timestamp=guild.created_at)
 
         total_nsfw = sum([1 for channel in guild.text_channels if channel.is_nsfw()])
 
@@ -301,10 +312,8 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
 
         if available_features:
             embed.add_field(name="Features", value="\n".join(available_features))
-        embed.add_field(
-            name="Created at",
-            value=utils.fmt_delta(guild.created_at),
-        )
+
+        embed.set_footer(text="Guild created at")
 
         await ctx.send(embed=embed)
 
@@ -475,9 +484,63 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
 
         await ctx.send(f"Custom prefix {ret!r} removed.")
 
-    @commands.Cog.listener()
-    async def on_test_complete(self, thing):
-        await self.bot.get_guild(thing.gid).get_channel(thing.cid).send(repr(thing))
+    @commands.command(name="linecount")
+    async def linecount(self, ctx):
+        """See how many code lines make up this bot."""
+        pag = commands.Paginator(prefix="```lua")
+        try:
+            with ShellReader(
+                    "cloc --exclude-dir=venv,markov,.idea --quiet --hide-rate .", timeout=10, loop=ctx.bot.loop
+            ) as reader:
+                async for count, line in utils.aioenumerate(reader):
+                    # skip header
+                    if count >= 2:
+                        pag.add_line(line)
+        except asyncio.TimeoutError:
+            return await ctx.send("Somehow timedout while counting lines.")
+
+        for page in pag.pages:
+            await ctx.send(page)
+
+    VALID_LANGUAGES = frozenset(
+        {
+            "ky", "mi", "az", "lt", "sd", "af", "he", "eu", "ar", "hr", "ko", "sq", "mk", "kn", "st", "so", "ps", "pl",
+            "it", "yi", "ja", "da", "ne", "ro", "ny", "gu", "fy", "gd", "en", "si", "kk", "bs", "tl", "vi", "fi", "fa",
+            "is", "no", "la", "zh", "ml", "ga", "te", "uk", "sv", "ht", "cy", "am", "mt", "jw", "id", "be", "lv", "tr",
+            "sk", "ur", "mn", "tg", "sn", "mr", "sr", "ha", "bn", "et", "zu", "cs", "mg", "lo", "sl", "yo", "ta", "gl",
+            "fr", "bg", "ku", "hi", "uz", "ca", "ms", "sw", "sm", "th", "hu", "es", "el", "de", "my", "nl", "iw", "pa",
+            "co", "xh", "km", "ru", "eo", "ig", "ka", "hy", "su", "lb", "pt"
+        }
+    )
+
+    @commands.command(name="translate")
+    async def translate(self, ctx, target: lambda x: x.lower(), *, text: commands.clean_content):
+        """Translate some text.
+
+        target must be in ``sourcelang:targetlang`` format."""
+        try:
+            sl, tl = target.split(":")
+        except ValueError:
+            return await ctx.send("Invalid target passed, must be ``sourcelang:targetlang``")
+
+        if sl not in self.VALID_LANGUAGES and not sl == "auto":
+            raise commands.BadArgument("Source language invalid.")
+        if tl not in self.VALID_LANGUAGES:
+            raise commands.BadArgument("Target language invalid.")
+
+        data = await ctx.get("https://translate.googleapis.com/translate_a/single", client="gtx", sl=sl, tl=tl,
+                             dt="t", q=text,
+                             __headers=(
+                                 ("User-Agent",
+                                  "Mozilla/5.0 (Windows NT 6.3; Win64; x64) Gecko/20100101 Firefox/53.0"),
+                             ))
+
+        translated = await commands.clean_content(use_nicknames=False).convert(ctx, "".join(t[0] for t in data[0]))
+        await ctx.send(f"From **{data[2]}** to **{tl}**\n\n**Source:** {text}\n**Translated:** {translated}")
+
+    @commands.command(name="testt")
+    async def test(self, ctx, a, b, c):
+        raise AssertionError()
 
 
 def setup(bot):

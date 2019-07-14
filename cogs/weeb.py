@@ -63,7 +63,7 @@ class Weeb(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
 
     async def build_anime_manga_embed(self, ctx, data, type_):
         if data["isAdult"] and not ctx.channel.is_nsfw():
-            raise commands.BadArgument(f"This {type_.lower()} is adult only, consider searching it in NSFW channel.")
+            raise commands.BadArgument(f"This {type_.lower()} is adult only, consider searching it in a NSFW channel.")
 
         try:
             c = int(data["coverImage"]["color"].lstrip("#"), 16)

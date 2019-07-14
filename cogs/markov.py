@@ -1,9 +1,8 @@
+import pickle
 import random
-import typing
+from collections import Counter
 
-import aiofiles  # Using aiofiles because I'm way too lazy to rewrite this for DB integration.
 from discord.ext import commands
-from markovchain.text import MarkovText
 
 
 class Markov(commands.Cog):
@@ -11,62 +10,69 @@ class Markov(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.punctuation = ["!", ".", "?", "-"]
+
+        with open("markov.pack", "rb") as f:
+            self.data = {}
+            for k, v in pickle.load(f).items():
+                del v[None]
+                self.data.update({k: v})
+
+    def cog_unload(self):
+        with open("markov.pack", "wb+") as f:
+            f.write(pickle.dumps(self.data))
+
+    def cog_check(self, ctx):
+        return ctx.guild in self.bot.config.markov_guilds
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        await self.markovlogging(message)
-
-    async def markovlogging(self, message):
-        ctx = await self.bot.get_context(message)
-        if ctx.valid:
-            return
-        if message.author.bot:
-            return
-        if not message.content or message.guild.id not in self.bot.config.markov_guilds:
+        if not message.content or message.author.bot:
             return
 
-        prefixes = [".", "f?", "h?", "!", ";", "=", "--", "%", "?"]
-        if any(message.content.lower().startswith(prefix) for prefix in prefixes):
+        if message.guild is None or message.guild.id not in self.bot.config.markov_guilds:
             return
 
-        await self.do_log(message.clean_content)
+        before = None
+        for word in message.content.split():
+            actual = word.strip(" \n\r")
+            if actual not in self.data:
+                self.data[actual] = Counter()
+            if before is not None:
+                self.data[actual][before] += 1
+            before = actual
 
-    @commands.command(hidden=True)
-    async def mlog(self, ctx, *, message: typing.Optional[str]):
-        """Respond to a message with a Markov chain."""
-        if ctx.guild.id not in self.bot.config.markov_guilds:
-            raise commands.CheckFailure()
+    @commands.command(name="mlog")
+    async def mlog(self, ctx):
+        before = None
+        maxlen = random.randint(5, 13)
+        entries = []
 
-        if message:
-            await self.do_log(await commands.clean_content().convert(ctx, message))
+        while len(entries) < maxlen:
+            word = self.get_next_word(before).strip(" \n\r")
 
-        await self.markovgen(ctx)
+            before = word
 
-    async def markovgen(self, ctx):
-        randomized_int = random.randint(1, 602)
-        async with aiofiles.open(f"markov/markov ({randomized_int}).txt") as f:
-            text = MarkovText()
-            async for line in f:
-                text.data(line, part=True)
+            entries.append(word)
 
-        clean = await commands.clean_content(fix_channel_mentions=True).convert(ctx, text())
-        await ctx.send(clean)
+        result = " ".join(entries)
+        await ctx.send(await self.normalize(ctx, result))
 
-    async def do_log(self, msg):
-        randomized_int = random.randint(1, 602)
+    async def normalize(self, ctx, phrase):
+        phrase += ("." if not phrase.endswith((".", "!", "-", "?")) else "")
 
-        async with aiofiles.open(f"markov/markov ({randomized_int}).txt", "a+") as f:
-            dot = "."
-            if len(msg) <= 3 or any(punct in msg for punct in ["!", ".", "?", "-"]):
-                dot = ""
+        cleaned = await commands.clean_content(use_nicknames=False).convert(ctx, phrase)
 
-            await f.write(f"{msg}{dot}\n")
+        cleaned = cleaned[0].upper() + cleaned[1:]
 
-    @mlog.error
-    async def mlog_handler(self, ctx, error):
-        if isinstance(error, commands.CheckFailure):
-            await ctx.send("This command is locked to a few selected guilds.")
+        return cleaned
+
+    def get_next_word(self, before):
+        elements = list(self.data[before].elements())
+        if before not in self.data or not elements:
+            rand = random.choice(list(self.data.keys()))
+        else:
+            rand = random.choice(elements)
+        return rand
 
 
 def setup(bot):
