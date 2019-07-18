@@ -125,21 +125,21 @@ class TakuruBot(commands.Bot):
             aioredis.create_redis_pool(**self.config.dbs.redis, loop=self.loop, encoding="utf-8"),
             timeout=20.0, loop=self.loop
         )
-        self.timers = utils.TimerManager(self)
 
         LOG.info("Connected to Redis")
         self.db = await asyncpg.create_pool(**self.config.dbs.psql, loop=self.loop)
         LOG.info("Connected to Postgres")
+
+        self.timers = utils.BetterTimerManager(self)
 
         self.pokeapi = await async_pokepy.connect(loop=self.loop)
         self.ezr = await utils.EasyRequests.start(self)
 
         LOG.info("Finished setting up API stuff")
 
-        async with self.db.acquire() as db:
-            async with db.transaction():
-                async for d in db.cursor("SELECT * FROM prefixes;"):
-                    self.prefix_dict[d["guild_id"]] = d["prefix"]
+        async with utils.acquire_transaction(self.db) as db:
+            async for d in db.cursor("SELECT * FROM prefixes;"):
+                self.prefix_dict[d["guild_id"]] = d["prefix"]
 
         LOG.debug("Done fetching and inserting prefixes %s", self.prefix_dict)
 
@@ -181,7 +181,7 @@ class TakuruBot(commands.Bot):
         LOG.info("Bot closed completely.")
 
     async def close(self):
-        self.timers.close()
+        self.timers.cleanup()
         self.redis.close()
 
         done, pending = await asyncio.wait(

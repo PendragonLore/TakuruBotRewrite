@@ -70,10 +70,8 @@ def if_no_perms_then_vote(vote_name, string):
                 raise commands.BadArgument("You can't vote.")
             votes = getattr(ctx.player, vote_name)
 
-            no_bots = {x for x in ctx.author.voice.channel.members}
+            no_bots = {x for x in ctx.author.voice.channel.members if not x.bot}
             necessary_votes = math.ceil(len(no_bots) / 2)
-
-            print(len(votes), necessary_votes, no_bots)
 
             if ctx.author in votes:
                 raise commands.BadArgument("You already voted.")

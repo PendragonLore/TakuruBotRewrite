@@ -26,6 +26,8 @@ PURGE_FLAGS = {
     "endswith": utils.Flag(),
     "member": utils.Flag(greedy=True, converter=commands.MemberConverter),
     "bots": utils.Flag(const=True, type=bool, default=False, nargs="?", consume=False),
+    "or": utils.Flag(const=True, type=bool, default=False, nargs="?", consume=False),
+    "not": utils.Flag(const=True, type=bool, default=False, nargs="?", consume=False),
     "after": utils.Flag(converter=utils.HumanTime(arg_required=False, past_ok=True)),
     "before": utils.Flag(converter=utils.HumanTime(arg_required=False, past_ok=True)),
 }
@@ -44,6 +46,9 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         if not flags:
             flags = {}
 
+        if flags.get("or") and flags.get("not"):
+            raise commands.BadArgument("``--or`` and ``--not`` cannot be passed together")
+
         amount = min(amount, 1000)
 
         try:
@@ -51,10 +56,15 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         except discord.HTTPException:
             pass
 
-        predicates = [(n, PRED_MAP[n]) for n, f in flags.items() if f and n not in {"after", "before"}]
+        predicates = [(n, PRED_MAP[n]) for n, f in flags.items() if f and n not in {"after", "before", "or", "not"}]
 
         def check(m):
-            return all([x(m, flags[n]) for n, x in predicates])
+            if flags.get("or"):
+                return any([x(m, flags[n]) for n, x in predicates])
+            elif flags.get("not"):
+                return not all([x(m, flags[n]) for n, x in predicates])
+            else:
+                return all([x(m, flags[n]) for n, x in predicates])
 
         dummy = type("a", (), {"date": None})()
         kwargs = {
@@ -85,7 +95,7 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
     @commands.group(name="purge", aliases=["prune", "cleanup"], invoke_without_command=True)
     @utils.bot_and_author_have_permissions(manage_messages=True)
     async def bulk_delete(self, ctx, amount: int, *,
-                          flags: utils.ShellFlags(**PURGE_FLAGS)=None):
+                          flags: utils.ShellFlags(**PURGE_FLAGS) = None):
         """Bulk delete messages from a channel.
 
         The amount of messages specified is not the amount deleted but the amount scanned.
@@ -104,7 +114,9 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         ``--endswith [words]`` all messages not ending with ``words`` will be ignored. Case sensitive.
         ``--member [members...]`` all messages which were not written by any of ``members`` will be ignored.
                                  Members must be a list of member names/mentions/ids.
-        ``--bots`` all messages which are authored from bots will be ignored. No arguments needed."""
+        ``--bots`` all messages which are authored from bots will be ignored. No arguments needed.
+        ``--or`` only one of the conditions specified must be met to delete the message.
+        ``--not`` all conditions must not match for the message to be deleted."""
         await self.do_bulk_delete(ctx, amount, flags)
 
     @commands.command(name="kick")
@@ -237,7 +249,8 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
             raise commands.BadArgument("Failed to give Mute role to the target, "
                                        "check permissions, hierarchy and if both are still in the guild.")
         else:
-            await self.bot.timers.create_timer("mute", delta, guild_id=guild_id, member_id=member.id, role_id=role.id)
+            await self.bot.timers.create_timer("mute", time.date, guild_id=guild_id,
+                                               member_id=member.id, role_id=role.id)
 
         try:
             nat = naturaldelta(delta)
@@ -254,56 +267,62 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         as that could cause unexpected behaviour in the future."""
         role = await self.get_mute_role(ctx)
 
-        removed = role in member.roles
+        try:
+            await member.remove_roles(role, reason=reason)
+        except discord.HTTPException:
+            return await ctx.send("Failed to remove the mute role from the member, please check my permissions.")
 
-        if removed:
-            try:
-                await member.remove_roles(role, reason=reason)
-            except discord.HTTPException:
-                return await ctx.send("Failed to remove the mute role from the member, please check my permissions.")
+        async with ctx.db.acquire() as db:
+            query = """
+            SELECT id
+            FROM times
+            WHERE name = 'mute'
+            AND (args->'guild_id')::bigint = $1
+            AND (args->'member_id')::bigint = $2;
+            """
 
-        kwargs = {"guild_id": ctx.guild.id, "member_id": member.id, "role_id": role.id}
-        await self.bot.timers.delete_timer("mute", **kwargs)
+            maybe_timer_id = await db.fetchval(query, ctx.guild.id, member.id)
 
-        if not removed:
-            return await ctx.send(f"Member {member} is not muted.")
+        try:
+            await self.bot.timers.delete_timer(maybe_timer_id)
+        except TypeError:
+            pass
 
         await ctx.send(f"Unmuted {member} ({reason}).")
 
     @commands.command(name="mutes")
     async def mutes(self, ctx):
         """List all the mutes active in this guild."""
-        redis = ctx.bot.redis
-        d = []
 
-        async for key in redis.iscan(match="timer-mute:*"):
-            data = await redis.hmget(key, "guild_id", "member_id")
-            if not int(data[0]) == ctx.guild.id:
-                continue
+        query = """
+        SELECT (args->'member_id')::bigint AS member_id, expires_at
+        FROM times
+        WHERE name = 'mute'
+        AND (args->'guild_id')::bigint = $1;
+        """
 
-            ttl = await redis.ttl(key)
+        async with ctx.db.acquire() as db:
+            data = await db.fetch(query, ctx.guild.id)
 
-            d.append({"member_id": int(data[1]), "ttl": ttl})
+        if not data:
+            return await ctx.send("urr")
 
-        for l in utils.chunks(d, 10):
+        for chunk in utils.chunks(data, 10):
             embed = discord.Embed(title=f"Mutes for {ctx.guild}")
             embed.description = ""
 
-            for dct in l:
+            for dct in chunk:
                 member = ctx.guild.get_member(dct["member_id"]) or f"*Left the guild* (id: {dct['member_id']})"
                 try:
-                    nat = naturaldelta(dct["ttl"])
+                    nat = naturaldelta(dct["expires_at"] - datetime.utcnow())
                 except OverflowError:
                     nat = "a long time"
 
-                embed.description += f"{member} will be unmuted in **{nat}**\n"
+                embed.description += f"{member} | will be unmuted in **{nat}**\n"
 
             ctx.pages.add_entry(embed)
 
-        try:
-            await ctx.paginate()
-        except commands.CommandInvokeError:
-            await ctx.send("No mutes.")
+        await ctx.paginate()
 
     @commands.Cog.listener()
     async def on_mute_complete(self, mute):

@@ -1,7 +1,7 @@
-import math
 import datetime
-import traceback
 import inspect
+import math
+import traceback
 
 import discord
 import sentry_sdk
@@ -99,7 +99,7 @@ class CommandHandler(commands.Cog):
             embed = discord.Embed(title="Command Error", timestamp=datetime.datetime.utcnow(),
                                   color=discord.Color.red())
 
-            embed.add_field(name="Traceback", value="```py\n" + "".join(traceback_text) + "```")
+            embed.description = "```py\n" + "".join(traceback_text) + "```"
             embed.add_field(name="Metadata", value=(f"**Command**: `{ctx.command.qualified_name}`\n"
                                                     f"**Guild**: `{ctx.guild.id}`\n"
                                                     f"**Channel**: `{ctx.channel.id}`\n"

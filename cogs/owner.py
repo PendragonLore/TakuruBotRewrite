@@ -1,6 +1,7 @@
 from discord.ext import commands
 
-from utils.emotes import FESTIVE, KAZ_HAPPY
+import utils
+from utils.emotes import ARI_DERP, KAZ_HAPPY
 
 
 class Owner(commands.Cog):
@@ -12,16 +13,45 @@ class Owner(commands.Cog):
 
         return True
 
-    @commands.command(name="blacklist", hidden=True)
-    async def blacklist(self, ctx, thing: str, id_: int):
-        s = getattr(ctx.bot, f"blacklisted_{thing}s")
-        if id_ not in s:
-            s.add(id_)
-            await ctx.bot.redis("SADD", f"blacklisted_{thing}s", str(id_))
-            await ctx.add_reaction(FESTIVE)
+    @commands.command(name="sql")
+    async def sql(self, ctx, *, query: utils.Codeblock):
+        """Run a SQL query."""
+        is_not_select = query.lower().count("select") == 0
+        async with ctx.db.acquire() as db:
+            if is_not_select:
+                request = db.execute
+            else:
+                request = db.fetch
+
+            results = await request(query)
+
+        if is_not_select:
+            return await ctx.send(results)
+
+        if not results:
+            return await ctx.send("no results")
+
+        headers = list(results[0].keys())
+        table = utils.Tabulator()
+        table.set_columns(headers)
+        table.add_rows(list(r.values()) for r in results)
+        render = table.render()
+
+        fmt = f"```\n{render}\n```"
+
+        await ctx.send(fmt)
+
+    # from Adventure! https://github.com/XuaTheGrate/Adventure xuadontkillmepleaseee
+    @commands.command(name="redis")
+    async def redis(self, ctx, *args):
+        """Run a redis command."""
+        try:
+            ret = await ctx.bot.redis.execute(*args)
+            await ctx.send(ret)
+        except Exception as exc:
+            await ctx.add_reaction(ARI_DERP)
+            raise exc
         else:
-            s.remove(id_)
-            await ctx.bot.redis("SREM", f"blacklister_{thing}s", str(id_))
             await ctx.add_reaction(KAZ_HAPPY)
 
 

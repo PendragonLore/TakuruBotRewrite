@@ -1,7 +1,9 @@
+import contextlib
 import itertools
 
 import humanize
 
+from .better_timers import TimerManager as BetterTimerManager  # noqa: F401
 from .checks import *  # noqa: F401
 from .config import Config  # noqa: F401
 from .context import RightSiderContext  # noqa: F401
@@ -10,9 +12,9 @@ from .defaults import *  # noqa: F401
 from .emotes import *  # noqa: F401
 from .ezrequests import EasyRequests  # noqa: F401
 from .formats import PaginationError, Paginator, Plural, Tabulator  # noqa: F401
+from .nsfw_parser import Node, NSFWParser  # noqa: F401
 from .timers import TimerManager  # noqa: F401
 from .waveobj import Player, Track  # noqa: F401
-from .nsfw_parser import NSFWParser, Node
 
 
 async def aioenumerate(iterator, start=0, step=1):
@@ -45,3 +47,10 @@ def fmt_uptime(delta):
 def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
+
+
+@contextlib.asynccontextmanager
+async def acquire_transaction(db):
+    async with db.acquire() as conn:
+        async with conn.transaction():
+            yield conn

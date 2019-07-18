@@ -192,7 +192,7 @@ class Paginator:
             )
 
             try:
-                done.pop().result()
+                done.pop()
             except Exception:
                 return await self.stop(delete=False)
 

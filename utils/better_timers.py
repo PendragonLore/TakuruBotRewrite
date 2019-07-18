@@ -1,7 +1,10 @@
 import asyncio
 import datetime
+import operator
 
 from discord.ext import tasks
+
+import utils
 
 try:
     import ujson as json
@@ -36,9 +39,15 @@ class TimerManager:
 
         self.queue = asyncio.Queue(loop=bot.loop)
 
+        self._lock = asyncio.Lock(loop=bot.loop)
+        self._waiters = []
+
         self.fetch_timers.start()
 
     def cleanup(self):
+        for _, waiter in self._waiters:
+            waiter.cancel()
+        self._waiters.clear()
         self.fetch_timers.cancel()
 
     @tasks.loop()
@@ -51,28 +60,22 @@ class TimerManager:
 
     @fetch_timers.before_loop
     async def before_fetch_timers(self):
-        async with self.bot.db.acquire() as db:
-            async with db.transaction():
-                async for timer in db.cursor("SELECT * FROM times;"):
-                    delta = (timer["expires_at"] - datetime.datetime.utcnow()).total_seconds()
+        async with utils.acquire_transaction(self.bot.db) as db:
+            async for timer in db.cursor("SELECT * FROM times;"):
+                delta = (timer["expires_at"] - datetime.datetime.utcnow()).total_seconds()
 
-                    obj = Timer.from_record(timer)
-                    if delta <= 0:
-                        await self.dispatch(obj)
-                        continue
+                obj = Timer.from_record(timer)
+                if delta <= 0:
+                    await self.dispatch(obj)
+                    continue
 
-                    self.bot.loop.call_later(delta, lambda: self.queue.put_nowait(obj))
+                waiter = self.bot.loop.call_later(delta, lambda: self.queue.put_nowait(obj))
+                self._waiters.append((obj, waiter))
 
     async def dispatch(self, timer):
         self.bot.dispatch(f"{timer.name}_complete", timer)
 
-        async with self.bot.db.acquire() as db:
-            query = """
-            DELETE FROM times
-            WHERE id = $1;
-            """
-
-            await db.execute(query, timer.id)
+        await self.delete_timer(timer.id)
 
     async def create_timer(self, name_, expire_at_, **kwargs):
         async with self.bot.db.acquire() as db:
@@ -92,6 +95,33 @@ class TimerManager:
             await self.dispatch(obj)
             return
 
-        self.bot.loop.call_later(delta, lambda: self.queue.put_nowait(obj))
+        waiter = self.bot.loop.call_later(delta, lambda: self.queue.put_nowait(obj))
+
+        self._waiters.append((obj, waiter))
 
         return obj
+
+    async def delete_timer(self, timer_id):
+        # idk if a race condition is possible but w/e.
+        async with self._lock:
+            pred = operator.attrgetter("id")
+
+            for index, (timer, waiter) in enumerate(self._waiters):
+                if pred(timer) == timer_id:
+                    break
+            else:
+                raise TypeError("err err not found")
+
+            if not waiter.cancelled():
+                waiter.cancel()
+
+            self._waiters.pop(index)
+            async with self.bot.db.acquire() as db:
+                query = """
+                DELETE FROM times
+                WHERE id = $1;
+                """
+
+                await db.execute(query, timer_id)
+
+            return timer

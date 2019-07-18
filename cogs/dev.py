@@ -3,7 +3,6 @@ import binascii
 import io
 import os
 import re
-import typing
 import zlib
 from datetime import datetime
 from urllib.parse import quote as urlquote

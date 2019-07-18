@@ -91,13 +91,6 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
 
         await ctx.send(embed=embed)
 
-    @commands.command(name="roleinfo")
-    async def roleinfo(self, ctx, *, role: discord.Role):
-        embed = discord.Embed(color=role.color, timestamp=role.created_at)
-        embed.set_author(name=ctx.author, icon_url=ctx.author.avatar_url)
-
-        embed.set_footer(text="Role created at")
-
     async def do_perms(self, ctx, iterable, color):
         def fmt(arg: str):
             return arg.replace("_", " ").title().replace("Tts", "TTS")

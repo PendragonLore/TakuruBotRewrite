@@ -91,10 +91,12 @@ class Music(commands.Cog):
 
         await ctx.player.current_text.send(f"Added **{track}** to the queue.")
 
-    @voice_.command(name="dc")
+    @voice_.command(name="dc", aliases=["disconnect", "destroy", "stop"])
     @player_perms_check()
     async def disconnect(self, ctx):
-        """Stop, clear the queue and disconnect the player from the current channel."""
+        """Stop, clear the queue and disconnect the player from the current channel.
+
+        Only the player owner, an admin or a moderator can use this command."""
         fmt = f"Disconnected from **{ctx.player.current_voice}**."
 
         await ctx.player.destroy()
@@ -150,14 +152,28 @@ class Music(commands.Cog):
                                                 f"of **{fmt}** (not counting streams)"
                                             ), timeout=60)
         for n, track in enumerate(total, 1):
-            print("heyo")
             trunc = 62 - len(str(track.requester))
             pages.add_line(f"`{n}` - [**{utils.trunc_text(track.title, trunc)}**]({track.uri}) by "
                            f"**{track.requester}**")
 
-        print(pages.pages)
-
         await interface.send_to(ctx)
+
+    @voice_.command(name="qrem")
+    async def qskip(self, ctx, index: lambda x: int(x) - 1):
+        """Remove a track from the queue.
+
+        The index are based on the ones seen in ``queue``."""
+        if not ctx.player.queue:
+            return await ctx.send("The queue is empty.")
+        if index < 0:
+            return await ctx.send("Index cannot be negative.")
+
+        try:
+            track = ctx.player.queue.pop(index)
+        except IndexError:
+            await ctx.send(f"No track present at index {index}.")
+        else:
+            await ctx.send(f"Removed **{track}** from the queue.")
 
     @voice_.command(name="skip")
     @if_no_perms_then_vote("skips", "Voted to skip the current track.")
@@ -193,7 +209,7 @@ class Music(commands.Cog):
 
     @voice_.command(name="search")
     async def search(self, ctx, *, tracks: utils.TrackConverter(list_ok=True, url_ok=False)):
-        """Search a music track and select to put it in the queue."""
+        """Search and select a track to put it in the queue."""
         pages = commands.Paginator(prefix=None, suffix=None, max_size=500)
 
         interface = PaginatorEmbedInterface(
@@ -288,6 +304,7 @@ class Music(commands.Cog):
 
     @voice_.command(name="move")
     async def move(self, ctx, index: int, target: int):
+        """Move a track to a certain index of the queue."""
         if not ctx.player.queue:
             return await ctx.player.current_text.send("The queue is empty.")
 
@@ -325,6 +342,7 @@ class Music(commands.Cog):
     async def cog_before_invoke(self, ctx):
         if ctx.command == self.voice_:
             return
+
         if not ctx.player.owner:
             ctx.player.owner = ctx.author
         # a bit of a cluster fuck to ensure that there will always be a player owner.
@@ -341,7 +359,7 @@ class Music(commands.Cog):
         if ctx.me not in ctx.author.voice.channel.members:
             raise commands.BadArgument("Not in my same voice channel.")
 
-        if ctx.command == self.disconnect:
+        if ctx.command in {self.disconnect, self.queue, self.qskip, self.move}:
             return
 
         if not ctx.player.is_playing:

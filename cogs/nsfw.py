@@ -11,6 +11,11 @@ from discord.ext import commands, flags, tasks
 
 import utils
 
+try:
+    import ujson as json
+except ImportError:
+    import json
+
 LOG = logging.getLogger("cogs.nsfw")
 
 
@@ -150,6 +155,21 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
 
         await ctx.paginate()
 
+    @commands.command(name="safebooru")
+    async def safebooru(self, ctx, *, tags):
+        data = json.loads(await ctx.get(
+            "https://safebooru.org/index.php", page="dapi", s="post", q="index", json="1", tags=tags
+        ))
+
+        for post in data:
+            embed = discord.Embed(color=discord.Color(0x008CFF))
+            embed.set_image(url=f"https://safebooru.org//images/{post['directory']}/{post['image']}")
+            embed.set_footer(text=", ".join(post['tags'].split()))
+
+            ctx.pages.add_entry(embed)
+
+        await ctx.paginate()
+
     @commands.command(name="sauce", aliases=["saucenao"], cls=flags.FlagCommand)
     @utils.requires_config("tokens", "apis", "saucenao")
     async def saucenao(self, ctx, *, url: typing.Optional[lambda x: x.strip("<>")]=utils.FirstAttachment):
@@ -161,18 +181,15 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
         except (aiohttp.ClientError, TypeError):
             raise commands.BadArgument("You must either provide a valid attachment or image url.")
 
-        try:
-            sauce = await ctx.get(
-                "https://saucenao.com/search.php",
-                cache=True,
-                db=999,
-                output_type=2,
-                numres=5,
-                url=url,
-                api_key=ctx.bot.config.tokens.apis.saucenao,
-            )
-        except Exception as e:
-            raise e
+        sauce = await ctx.get(
+            "https://saucenao.com/search.php",
+            cache=True,
+            db=999,
+            output_type=2,
+            numres=5,
+            url=url,
+            api_key=ctx.bot.config.tokens.apis.saucenao,
+        )
 
         r = sauce["results"]
 

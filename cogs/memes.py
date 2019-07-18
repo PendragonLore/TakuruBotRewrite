@@ -132,9 +132,8 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         LIMIT {limit};
         """
 
-        async with ctx.db.acquire() as db:
-            async with db.transaction():
-                results = [result["name"] async for result in db.cursor(sql, ctx.guild.id, name)]
+        async with utils.acquire_transaction(ctx.db) as db:
+            results = [result["name"] async for result in db.cursor(sql, ctx.guild.id, name)]
 
         if not results:
             raise commands.BadArgument("No results.")

@@ -1,8 +1,8 @@
+import asyncio
 from datetime import timedelta
 
 import wavelink
 from dateutil import parser as dateparser
-import asyncio
 
 from .custom_queue import CustomQueue
 
