@@ -104,10 +104,8 @@ class TimerManager:
     async def delete_timer(self, timer_id):
         # idk if a race condition is possible but w/e.
         async with self._lock:
-            pred = operator.attrgetter("id")
-
             for index, (timer, waiter) in enumerate(self._waiters):
-                if pred(timer) == timer_id:
+                if timer.id == timer_id:
                     break
             else:
                 raise TypeError("err err not found")
