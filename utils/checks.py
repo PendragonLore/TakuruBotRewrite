@@ -82,8 +82,8 @@ def if_no_perms_then_vote(vote_name, string):
                 votes.clear()
                 return True
 
-            raise commands.BadArgument(string.format(thing=f"{'resume' if ctx.player.paused else 'pause'}") +
-                                       f"\n{utils.Plural(necessary_votes - len(votes)):vote} remaining.")
+            raise commands.BadArgument(string.format(thing=f"{'resume' if ctx.player.paused else 'pause'}")
+                                       + f"\n{utils.Plural(necessary_votes - len(votes)):vote} remaining.")
 
         return True
 

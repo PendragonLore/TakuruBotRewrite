@@ -171,7 +171,7 @@ class Music(commands.Cog):
         try:
             track = ctx.player.queue.pop(index)
         except IndexError:
-            await ctx.send(f"No track present at index {index}.")
+            await ctx.send(f"No track present at index {index + 2}.")
         else:
             await ctx.send(f"Removed **{track}** from the queue.")
 
@@ -232,8 +232,8 @@ class Music(commands.Cog):
             if not actual.isdigit():
                 return False
 
-            return (0 <= (int(actual) - 1) <= index and m.content.startswith(ctx.prefix) and
-                    ctx.author == m.author and ctx.channel == m.channel)
+            return (0 <= (int(actual) - 1) <= index and m.content.startswith(ctx.prefix)
+                    and ctx.author == m.author and ctx.channel == m.channel)
 
         try:
             response = await ctx.bot.wait_for("message", timeout=60, check=check)
@@ -372,7 +372,6 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_wavelink_track_stuck(self, payload):
-        print(payload.track)
         await payload.track.ctx.send("The track somehow got stuck. "
                                      "If the track was a stream it means the stream is having latency issues.")
         await payload.player.stop()

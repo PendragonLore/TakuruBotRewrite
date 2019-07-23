@@ -46,6 +46,7 @@ class EasyRequests:
 
     def clear_cache(self, new_size=64):
         self.cache = LRU(new_size)
+
         LOG.info("Cleared cache, size set to %s", new_size)
 
     async def request(self, __method, __url, *, cache=False, **params):

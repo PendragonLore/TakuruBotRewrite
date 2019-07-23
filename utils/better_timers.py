@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import operator
 
 from discord.ext import tasks
 
@@ -60,6 +59,8 @@ class TimerManager:
 
     @fetch_timers.before_loop
     async def before_fetch_timers(self):
+        await self.bot.wait_until_ready()
+
         async with utils.acquire_transaction(self.bot.db) as db:
             async for timer in db.cursor("SELECT * FROM times;"):
                 delta = (timer["expires_at"] - datetime.datetime.utcnow()).total_seconds()
@@ -80,7 +81,7 @@ class TimerManager:
     async def create_timer(self, name_, expire_at_, **kwargs):
         async with self.bot.db.acquire() as db:
             query = """
-            INSERT INTO times (name, expires_at, args) 
+            INSERT INTO times (name, expires_at, args)
             VALUES ($1, $2, $3::jsonb)
             RETURNING id;
             """

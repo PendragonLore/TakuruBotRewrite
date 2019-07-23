@@ -3,6 +3,7 @@ import itertools
 
 import humanize
 
+from . import image  # noqa: F401
 from .better_timers import TimerManager as BetterTimerManager  # noqa: F401
 from .checks import *  # noqa: F401
 from .config import Config  # noqa: F401

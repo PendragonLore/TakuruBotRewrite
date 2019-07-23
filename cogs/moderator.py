@@ -119,43 +119,67 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
         ``--not`` all conditions must not match for the message to be deleted."""
         await self.do_bulk_delete(ctx, amount, flags)
 
+    def check_hierarcy(self, ctx, other, error_message):
+        if ctx.me.top_role.position < other.top_role.position or other == ctx.guild.owner:
+            raise commands.BadArgument(error_message)
+
     @commands.command(name="kick")
     @utils.bot_and_author_have_permissions(kick_members=True)
     async def kick(self, ctx, member: discord.Member, *, reason: commands.clean_content = "No reason."):
         """Kick a member, you can also provide a reason."""
+        self.check_hierarcy(ctx, member, f"I can't kick **{member}**.")
+
         try:
             await member.kick(reason=reason)
         except discord.HTTPException:
-            return await ctx.send(f"Failed to kick {member}.")
+            await ctx.send(f"Failed to kick {member}.")
+        else:
+            await ctx.send(f"Kicked **{member}** ({reason})")
 
-        await ctx.send(f"Kicked {member} ({reason})")
+    async def do_ban(self, ctx, member, reason, days=1):
+        self.check_hierarcy(ctx, member, f"I can't ban **{member}**.")
+
+        try:
+            await member.ban(reason=reason, delete_message_days=days)
+        except discord.HTTPException:
+            await ctx.send(f"Failed to ban {member}, check permissions, hierarchy "
+                           f"and if the member is still in the guild.")
+        else:
+            await ctx.send(f"Banned **{member}** ({reason})")
 
     @commands.command(name="ban")
     @utils.bot_and_author_have_permissions(ban_members=True)
     async def ban(self, ctx, member: discord.Member, *, reason: commands.clean_content = "No reason."):
-        """Ban a member, you can also provide a reason."""
-        try:
-            await member.ban(reason=reason)
-        except discord.HTTPException:
-            return await ctx.send(f"Failed to ban {member}, check permissions, hierarchy "
-                                  f"and if the member is still in the guild.")
+        """Ban a member, you can also provide a reason.
 
-        await ctx.send(f"Banned **{member}** ({reason})")
+        Deletes a day worth of messages."""
+        await self.do_ban(ctx, member, reason)
+
+    @commands.command(name="softban")
+    @utils.bot_and_author_have_permissions(ban_members=True)
+    async def softban(self, ctx, member: discord.Member, *, reason: commands.clean_content = "No reason."):
+        """Softban a member, you can also provide a reason.
+
+        Softbanning means that a week worth of messages of the member will be deleted.
+        The member will be unbanned immediately."""
+        await self.do_ban(ctx, member, reason, days=7)
+
+        await member.unban(reason="Softban")
 
     @commands.command(name="unban")
     @utils.bot_and_author_have_permissions(ban_members=True)
-    async def unban(self, ctx, user_id: int, *, reason: commands.clean_content = "No reason."):
+    async def unban(self, ctx, user: utils.BannedUser, *, reason: commands.clean_content = "No reason."):
         """Unban a member, only IDs accepted."""
         try:
-            await ctx.guild.unban(discord.Object(id=user_id), reason=reason)
+            await ctx.guild.unban(user, reason=reason)
         except discord.HTTPException:
-            return await ctx.send(f"Couldn't unban user with id `{user_id}`")
-
-        await ctx.send(f"Unbanned user with id `{user_id}`")
+            await ctx.send(f"Couldn't unban **{user}**")
+        else:
+            await ctx.send(f"Unbanned **{user}**")
 
     async def get_mute_role(self, ctx):
         try:
-            role = ctx.guild.get_role(int(await self.bot.redis.get(f"mute_role_id:{ctx.guild.id}")))
+            role = ctx.guild.get_role(int(await ctx.bot.redis.get(f"mute_role_id:{ctx.guild.id}")))
         except TypeError:
             raise commands.BadArgument("No mute role setup for this guild. You can set one with `setmute`.")
 
@@ -171,20 +195,14 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
 
         This will not automatically override the permissions of the role in any channel.
         If you want to do so, invoke ``setmuteperms``."""
-        resp = await ctx.bot.redis.set(f"mute_role_id:{ctx.guild.id}", role.id)
+        await ctx.bot.redis.set(f"mute_role_id:{ctx.guild.id}", role.id)
 
-        if not resp:
-            return await ctx.send("Something went wrong while setting the mute role, report this to the developer.")
-
-        await ctx.send(f"Set mute role for this guild to `{role}`")
+        await ctx.send(f"Set mute role for this guild to **{role}**")
 
     @commands.command(name="setmuteperms")
     @utils.bot_and_author_have_permissions(manage_roles=True)
     async def set_mute_role_perms(self, ctx):
-        """Set the overwrites of each channel of this guild for the mute role.
-
-        :x: Send Messages
-        :x: Add Reactions."""
+        """Set Add Reactions and Send Messages to false for all channels for this guild's mute role."""
         role = await self.get_mute_role(ctx)
 
         msg = await ctx.send("Setting permissions, might take a while...")
@@ -205,12 +223,15 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
             else:
                 counter["hit"] += 1
 
-        lines = [f"Done, changed permissions of {counter['hit']} channels out of {len(channels)} for role {role}."]
+        lines = []
 
+        if counter["hit"]:
+            lines.append(f"Done, changed permissions of **{utils.Plural(counter['hit']):channel}** out of "
+                         f"{len(channels)} for role **{role}**.")
         if counter["skip"]:
-            lines.append(f"Skipped {counter['skip']} channels due to permissions already set up.")
+            lines.append(f"Skipped **{utils.Plural(counter['skip']):channel}** due to permissions already set up.")
         if counter["miss"]:
-            lines.append(f"Failed to change the permissions of {counter['miss']} channels.")
+            lines.append(f"Failed to change the permissions of **{utils.Plural(counter['miss']):channel}**.")
 
         await msg.edit(content="\n".join(lines))
 
@@ -305,7 +326,7 @@ class Moderator(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(5, 2
             data = await db.fetch(query, ctx.guild.id)
 
         if not data:
-            return await ctx.send("urr")
+            return await ctx.send("No active mutes.")
 
         for chunk in utils.chunks(data, 10):
             embed = discord.Embed(title=f"Mutes for {ctx.guild}")

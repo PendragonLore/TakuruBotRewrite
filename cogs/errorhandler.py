@@ -1,6 +1,7 @@
 import datetime
 import inspect
 import math
+import sys
 import traceback
 
 import discord
@@ -12,8 +13,9 @@ from utils.ezrequests import WebException
 from utils.formats import PaginationError, Plural
 
 
-class CommandHandler(commands.Cog):
+class ErrorHandler(commands.Cog):
     def __init__(self, bot):
+        self.bot = bot
         self.wh = discord.Webhook.from_url(bot.config.wh_url, adapter=discord.AsyncWebhookAdapter(bot.ezr.session))
 
     @commands.Cog.listener()
@@ -119,6 +121,24 @@ class CommandHandler(commands.Cog):
 
         return p, f
 
+    @commands.Cog.listener()
+    async def on_error(self, event_name, *args, **kwargs):
+        _, exc, _ = sys.exc_info()
+
+        def push_to_sentry():
+            with sentry_sdk.push_scope() as scope:
+                scope.set_tag("event_name", event_name)
+                sentry_sdk.capture_exception(exc)
+
+        await self.bot.loop.run_in_executor(None, push_to_sentry)
+
+        embed = discord.Embed(title=event_name)
+        embed.description = "".join(traceback.format_exc())
+        embed.add_field(name="Args", value="\n".join([repr(x) for x in args]))
+        embed.add_field(name="Args", value="\n".join([f"{k}={v!r}" for k, v in kwargs.items()]))
+
+        await self.wh.send(embed=embed)
+
 
 def setup(bot):
-    bot.add_cog(CommandHandler(bot))
+    bot.add_cog(ErrorHandler(bot))

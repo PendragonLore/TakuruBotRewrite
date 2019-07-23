@@ -1,3 +1,4 @@
+import discord
 from discord.ext import commands
 
 import utils
@@ -39,7 +40,10 @@ class Owner(commands.Cog):
 
         fmt = f"```\n{render}\n```"
 
-        await ctx.send(fmt)
+        try:
+            await ctx.send(fmt)
+        except discord.HTTPException:
+            await ctx.post_to_mystbin(fmt, "u bad lol")
 
     # from Adventure! https://github.com/XuaTheGrate/Adventure xuadontkillmepleaseee
     @commands.command(name="redis")

@@ -516,10 +516,10 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
         except ValueError:
             return await ctx.send("Invalid target passed, must be ``sourcelang:targetlang``")
 
-        if sl not in self.VALID_LANGUAGES and not sl == "auto":
-            raise commands.BadArgument("Source language invalid.")
         if tl not in self.VALID_LANGUAGES:
             raise commands.BadArgument("Target language invalid.")
+        if sl not in self.VALID_LANGUAGES and not sl == "auto":
+            raise commands.BadArgument("Source language invalid.")
 
         data = await ctx.get("https://translate.googleapis.com/translate_a/single", client="gtx", sl=sl, tl=tl,
                              dt="t", q=text,
@@ -530,10 +530,6 @@ class General(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5
 
         translated = await commands.clean_content(use_nicknames=False).convert(ctx, "".join(t[0] for t in data[0]))
         await ctx.send(f"From **{data[2]}** to **{tl}**\n\n**Source:** {text}\n**Translated:** {translated}")
-
-    @commands.command(name="testt")
-    async def test(self, ctx, a, b, c):
-        raise AssertionError()
 
 
 def setup(bot):

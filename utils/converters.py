@@ -3,12 +3,35 @@ import inspect
 import re
 import shlex
 
+import discord
 import parsedatetime
 import wavelink
 from dateutil.relativedelta import relativedelta
 from discord.ext import commands
 
 import utils
+
+
+class BannedUser(commands.Converter):
+    async def convert(self, ctx, argument):
+        stripped = argument.strip()
+
+        if not stripped.isdigit():
+            raise commands.BadArgument("Only user ids are supported.")
+
+        actual = int(stripped)
+
+        user = ctx.bot.get_user(actual)
+
+        if user is not None:
+            return user
+
+        try:
+            user = await ctx.bot.fetch_user(user)
+        except discord.HTTPException:
+            raise commands.BadArgument(f"User with id ``{actual}`` not found.")
+        else:
+            return user
 
 
 class TrackConverter(commands.Converter):
