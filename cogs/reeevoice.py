@@ -166,12 +166,12 @@ class Music(commands.Cog):
         if not ctx.player.queue:
             return await ctx.send("The queue is empty.")
         if index < 0:
-            return await ctx.send("Index cannot be negative.")
+            return await ctx.send("Index cannot be negative or zero.")
 
         try:
             track = ctx.player.queue.pop(index)
         except IndexError:
-            await ctx.send(f"No track present at index {index + 2}.")
+            await ctx.send(f"No track present at index {index + 1}.")
         else:
             await ctx.send(f"Removed **{track}** from the queue.")
 
