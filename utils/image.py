@@ -3,6 +3,7 @@ import functools
 import hashlib
 import multiprocessing
 import sys
+import numpy
 import textwrap
 from io import BytesIO
 
@@ -101,6 +102,69 @@ def gayify_func(user_avatar, alpha):
 
             gay.save(ret, "png")
 
+    ret.seek(0)
+
+    return ret
+
+
+@process(10)
+def idfk(img, reverse=True):
+    ret = BytesIO()
+
+    with Image.open(img) as img:
+        arr = numpy.array(img)
+
+    first_dimension = arr.shape[0]
+
+    div = int(first_dimension / 2)
+
+    if reverse:
+        arr[::-1][div:first_dimension] = arr[div:first_dimension]
+    else:
+        arr[::-1][:div] = arr[:div]
+
+    Image.fromarray(arr).save(ret, format="png")
+
+    ret.seek(0)
+    return ret
+
+
+def do_normalise(imc):
+    return -numpy.log(1 / ((1 + imc) / 257) - 1)
+
+
+def undo_normalise(imc):
+    return (1 + 1 / (numpy.exp(-imc) + 1) * 257).astype("uint8")
+
+
+def rotation_matrix(theta):
+    return numpy.c_[
+        [1, 0, 0],
+        [0, numpy.cos(theta), -numpy.sin(theta)],
+        [0, numpy.sin(theta), numpy.cos(theta)]
+    ]
+
+
+@process(10)
+def yeet(img):
+    ret = BytesIO()
+    frames = []
+
+    with Image.open(img) as notarray:
+        a = notarray.convert("RGB").resize(tuple(int(x / 3) for x in notarray.size))
+        im = numpy.array(a)
+
+    def update(i):
+        im_rotated = numpy.einsum("ijk,lk->ijl", do_normalise(im), rotation_matrix(i * numpy.pi / 10))
+        actual = undo_normalise(im_rotated)
+
+        frames.append(Image.fromarray(actual))
+
+    for k in range(20):
+        update(k)
+
+    frames[0].save(ret, format="GIF", append_images=frames[1:], save_all=True, duration=100, loop=0)
+    del frames
     ret.seek(0)
 
     return ret

@@ -53,7 +53,7 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
     @commands.cooldown(1, 4, commands.BucketType.user)
     async def install_(self, ctx, *, package: commands.clean_content):
         """Install a package from homebrew.
-
+f
         ~~not really tho.~~"""
         msg = await ctx.send("Updating homebrew...")
 
@@ -128,7 +128,7 @@ class Memes(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, 
         FROM memes
         WHERE guild_id = $1
         AND name % $2
-        ORDER BY similarity(NAME, $2) DESC, name ASC
+        ORDER BY similarity(NAME, $2) DESC, name
         LIMIT {limit};
         """
 

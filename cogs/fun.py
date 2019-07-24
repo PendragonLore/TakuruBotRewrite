@@ -66,6 +66,24 @@ class FunStuff(commands.Cog, name="Fun",
 
         await self.do_imagery(ctx, utils.image.gayify_func, avy, flags["alpha"])
 
+    @commands.command(name="idkhowtocallthis")
+    async def idfk(self, ctx, *, url):
+        img = utils.image.ImageIO(await ctx.get(url))
+
+        await self.do_imagery(ctx, utils.image.idfk, img)
+
+    @commands.command(name="hm")
+    async def hm(self, ctx, *, url):
+        img = utils.image.ImageIO(await ctx.get(url))
+
+        await self.do_imagery(ctx, utils.image.idfk, img, reverse=True)
+
+    @commands.command(name="yeet")
+    async def yeet(self, ctx, *, url):
+        img = utils.image.ImageIO(await ctx.get(url))
+
+        await self.do_imagery(ctx, utils.image.yeet, img, __ext="gif")
+
     @commands.command(name="emojitext")
     async def emojitext(self, ctx, *, text: commands.clean_content(fix_channel_mentions=True)):
         text = text.lower()
