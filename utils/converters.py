@@ -341,6 +341,21 @@ class ShellFlags(commands.Converter):
     def __init__(self, **kwargs):
         self.flags = kwargs
 
+    async def _do_extra_conversion(self, converter, ctx, arg):
+        if inspect.isfunction(converter):
+            try:
+                return converter(arg)
+            except commands.BadArgument:
+                raise commands.BadArgument(f"Conversion to {converter.__name__!r} failed.")
+
+        if inspect.isclass(converter) and issubclass(converter, commands.Converter):
+            converter = converter()
+
+        if not isinstance(converter, commands.Converter):
+            raise commands.BadArgument("ur bad lol")
+
+        return await converter.convert(ctx, arg)
+
     async def convert(self, ctx, argument):
         parser = Parser(add_help=False, allow_abbrev=False)
 
@@ -374,16 +389,12 @@ class ShellFlags(commands.Converter):
                 continue
 
             if flag.converter:
-                if inspect.isclass(flag.converter):
-                    conv = flag.converter()
-                else:
-                    conv = flag.converter
-
+                conv = flag.converter
                 if flag.greedy:
                     ar = []
                     for k in arg:
                         try:
-                            c = await conv.convert(ctx, k)
+                            c = await self._do_extra_conversion(conv, ctx, k)
                         except commands.BadArgument:
                             break
                         else:
@@ -393,11 +404,12 @@ class ShellFlags(commands.Converter):
                     continue
 
                 if flag.consume:
-                    ret[name] = await conv.convert(ctx, " ".join(arg))
+                    ret[name] = await self._do_extra_conversion(conv, ctx, " ".join(arg))
                 else:
-                    ret[name] = await conv.convert(ctx, arg)
+                    ret[name] = await self._do_extra_conversion(conv, ctx, arg)
             else:
                 if flag.consume:
+                    print(arg)
                     ret[name] = " ".join(arg)
                 else:
                     ret[name] = arg

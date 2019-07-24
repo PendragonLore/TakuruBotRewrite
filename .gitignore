@@ -151,12 +151,6 @@ logs/
 output/
 
 # Other stuff
-
 lavalink
 markov
 pokecom
-cogs/trench.py
-map.py
-markov.pack
-markov.py
-do.sh

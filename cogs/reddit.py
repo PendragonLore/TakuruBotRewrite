@@ -115,7 +115,7 @@ class Reddit(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5,
         await self.do_post(ctx, f"/r/{urlquote(subreddit, safe='')}/{sort_type}.json", limit=20)
 
     async def do_post(self, ctx, path, **params):
-        fmt = path.lower() + ":".join([f"{k}={v}" for k, v in params.items()]).lower()
+        fmt = (path + ":".join([f"{k}={v}" for k, v in params.items()])).lower()
 
         try:
             return await self.embed_post(ctx, self._post_cache[fmt].pop())

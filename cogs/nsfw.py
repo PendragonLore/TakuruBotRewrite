@@ -139,11 +139,7 @@ class NSFW(commands.Cog, command_attrs=dict(cooldown=commands.Cooldown(1, 2.5, c
 
     @commands.command(name="zerochan", aliases=["zc"])
     async def zerochan(self, ctx, *, query):
-        """Search for an image on Zerochan.
-
-        While most, if not all, images on this image board can be considered SFW,
-        some might be too much ecchi-ish for a guild's standard definition of NSFW,
-        so it's in this extension for safety, might edit later."""
+        """Search for an image on Zerochan."""
         parser = utils.NSFWParser(ctx, "https://www.zerochan.net/search",
                                   request_params={"q": query, "cache": True},
                                   paths=[utils.Node("//img[@alt]/@src")[0::2]])

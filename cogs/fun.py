@@ -32,6 +32,8 @@ class FunStuff(commands.Cog, name="Fun",
     }
 
     async def do_imagery(self, ctx, func, *args, **kwargs):
+        ext = kwargs.pop("__ext", "png")
+
         key = (func.__name__ + ":".join([repr(x) for x in args]) + ":".join(
             [f"{k}={v!r}" for k, v in kwargs.items()]
         )).lower()
@@ -45,7 +47,7 @@ class FunStuff(commands.Cog, name="Fun",
             except asyncio.TimeoutError:
                 raise commands.BadArgument("Processing took too long.")
 
-        await ctx.send(file=discord.File(ret, filename=f"{ctx.command.name}-{ctx.message.id}.png"))
+        await ctx.send(file=discord.File(ret, filename=f"{ctx.command.name}-{ctx.message.id}.{ext}"))
         ret.seek(0)
 
     @commands.command(name="trump")
@@ -54,17 +56,23 @@ class FunStuff(commands.Cog, name="Fun",
                               "assets/fonts/Roboto.ttf", (50, 160))
 
     @commands.command(name="gay")
-    async def gayify(self, ctx, alpha: Optional[lambda x: min(int(x), 255)] = 128):
-        avy = await utils.image.get_avatar(ctx.author)
+    async def gayify(self, ctx, *, flags: utils.ShellFlags(
+        alpha=utils.Flag(type=int, default=128, consume=False),
+        member=utils.Flag(converter=commands.MemberConverter, default=None)
+    )):
+        flags = flags or {"member": ctx.author, "alpha": 128}
 
-        await self.do_imagery(ctx, utils.image.gayify_func, avy, alpha)
+        avy = await utils.image.get_avatar(flags["member"] or ctx.author)
+
+        await self.do_imagery(ctx, utils.image.gayify_func, avy, flags["alpha"])
 
     @commands.command(name="emojitext")
     async def emojitext(self, ctx, *, text: commands.clean_content(fix_channel_mentions=True)):
+        text = text.lower()
         actual = []
 
         for char in text:
-            maybe_emote = self.CHARS_MAP.get(char.lower())
+            maybe_emote = self.CHARS_MAP.get(char)
 
             if maybe_emote is None:
                 actual.append(char)
