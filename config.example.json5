@@ -72,5 +72,7 @@
     0
   ],
   // Your sentry URI
-  sentry_uri: ""
+  sentry_uri: "",
+  // Your webhook url for command errors
+  wh_url: ""
 }

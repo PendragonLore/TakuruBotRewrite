@@ -12,6 +12,40 @@ from discord.ext import commands
 import utils
 
 
+class ImageStuff(commands.Converter):
+    async def convert(self, ctx, argument):
+        argument = argument.strip()
+
+        try:
+            maybe_member = await commands.MemberConverter().convert(ctx, argument)
+        except commands.BadArgument:
+            pass
+        else:
+            return await utils.image.get_avatar(maybe_member)
+
+        try:
+            maybe_emote = await commands.PartialEmojiConverter().convert(ctx, argument)
+        except commands.BadArgument:
+            pass
+        else:
+            return utils.image.ImageIO(await maybe_emote.url.read())
+
+        maybe_url_match = TrackConverter.URL_REGEX.fullmatch(argument)
+
+        if maybe_url_match and maybe_url_match.group(0):
+            async with ctx.bot.ezr.session.get(argument) as resp:
+                if resp.status != 200:
+                    raise commands.BadArgument("Invalid URL.")
+
+                content_type = resp.headers.get("Content-Type", "")
+                if not any("image/" + x in content_type for x in ["gif", "jpeg", "png"]):
+                    raise commands.BadArgument("URL must be a direct link to the png/jpeg/gif image.")
+
+                return utils.image.ImageIO(await resp.read())
+
+        raise commands.BadArgument("No valid URL, emote or member passed.")
+
+
 class BannedUser(commands.Converter):
     async def convert(self, ctx, argument):
         stripped = argument.strip()

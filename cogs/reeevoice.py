@@ -290,7 +290,7 @@ class Music(commands.Cog):
 
         fmt = str(delta).split(".")[0]
 
-        await ctx.player.current_text.send(f"{ctx.command.qualified_name.capitalize()}ed to {fmt}.")
+        await ctx.player.current_text.send(f"{ctx.command.qualified_name.strip('V ').capitalize()}ed to `{fmt}``.")
 
     @voice_.command(name="pause")
     @if_no_perms_then_vote("pauses", "Voted to {thing} the player.")

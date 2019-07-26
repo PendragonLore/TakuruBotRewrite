@@ -1,13 +1,23 @@
 import asyncio
+import colorsys
+import contextlib
 import functools
 import hashlib
 import multiprocessing
 import sys
-import numpy
 import textwrap
 from io import BytesIO
 
+import numpy
 from PIL import Image, ImageDraw, ImageFont
+from scipy.signal import convolve2d
+
+
+@contextlib.contextmanager
+def bytesio_seek_0():
+    ret = BytesIO()
+    yield ret
+    ret.seek(0)
 
 
 class ImageIO(BytesIO):
@@ -68,7 +78,6 @@ def process(timeout=None):
 @process(10)
 def draw_text_on_img(text, width, image, font, coordinates, font_size=40, text_color=(0, 0, 0)):
     text = textwrap.wrap(text, width=width)
-    ret = BytesIO()
 
     with Image.open(image) as img:
         draw = ImageDraw.Draw(img)
@@ -81,36 +90,29 @@ def draw_text_on_img(text, width, image, font, coordinates, font_size=40, text_c
             draw.text((x, y), t, font=font, fill=text_color)
             y += height
 
-        img.save(ret, "png")
-
-    ret.seek(0)
+        with bytesio_seek_0() as ret:
+            img.save(ret, "png")
 
     return ret
 
 
 @process(10)
 def gayify_func(user_avatar, alpha):
-    ret = BytesIO()
-
     with Image.open(user_avatar) as background:
         background = background.resize((926, 926)).convert("RGBA")
 
         with Image.open("assets/images/gay.png") as flag:
             flag.putalpha(alpha)
 
-            gay = Image.alpha_composite(background, flag)
-
-            gay.save(ret, "png")
-
-    ret.seek(0)
+            with Image.alpha_composite(background, flag) as gay:
+                with bytesio_seek_0() as ret:
+                    gay.save(ret, "png")
 
     return ret
 
 
 @process(10)
 def idfk(img, reverse=True):
-    ret = BytesIO()
-
     with Image.open(img) as img:
         arr = numpy.array(img)
 
@@ -123,9 +125,9 @@ def idfk(img, reverse=True):
     else:
         arr[::-1][:div] = arr[:div]
 
-    Image.fromarray(arr).save(ret, format="png")
+    with bytesio_seek_0() as ret:
+        Image.fromarray(arr).save(ret, format="png")
 
-    ret.seek(0)
     return ret
 
 
@@ -147,11 +149,10 @@ def rotation_matrix(theta):
 
 @process(10)
 def yeet(img):
-    ret = BytesIO()
     frames = []
 
     with Image.open(img) as notarray:
-        a = notarray.convert("RGB").resize(tuple(int(x / 3) for x in notarray.size))
+        a = notarray.convert("RGB").resize(tuple(int(x / 2) for x in notarray.size))
         im = numpy.array(a)
 
     def update(i):
@@ -163,9 +164,71 @@ def yeet(img):
     for k in range(20):
         update(k)
 
-    frames[0].save(ret, format="GIF", append_images=frames[1:], save_all=True, duration=100, loop=0)
-    del frames
-    ret.seek(0)
+    with bytesio_seek_0() as ret:
+        frames[0].save(ret, format="GIF", append_images=frames[1:], save_all=True, duration=100, loop=0)
+
+    return ret
+
+
+@process(20)
+def speblur(img, w, mode):
+    window = numpy.ones((w, w))
+    window /= numpy.sum(window)
+
+    with Image.open(img) as image:
+        array = numpy.array(image.resize(tuple(int(x / 2) for x in image.size)).convert("RGB"))
+
+    imgs = []
+
+    for k in range(3):
+        if k == mode:
+            im_conv_d = convolve2d(array[:, :, k], window, mode="same", boundary="symm")
+        else:
+            im_conv_d = array[:, :, k]
+        imgs.append(im_conv_d)
+
+    with bytesio_seek_0() as ret:
+        Image.fromarray(numpy.stack(imgs, axis=2).astype("uint8")).save(ret, format="png")
+
+    return ret
+
+
+@process(10)
+def shitsort(img):
+    with Image.open(img) as image:
+        array = numpy.array(image.convert("RGB"))
+
+    array.sort(axis=1)
+
+    with bytesio_seek_0() as ret:
+        Image.fromarray(array).save(ret, format="png")
+
+    return ret
+
+
+@process(10)
+def gcsort(img):
+    with Image.open(img) as img:
+        array = numpy.array(img.resize(tuple(int(x / 2) for x in img.size)).convert("RGB"))
+
+    imgs = []
+
+    new = array.copy()
+    for index, sub in enumerate(array):
+        record = -1
+        selected = index
+        for j, subar in enumerate(sub):
+            b = colorsys.rgb_to_hsv(subar[0], subar[1], subar[2])[0]
+            if b > record:
+                selected = j
+                record = b
+        tmp = array[index]
+        new[index] = array[selected]
+        new[selected] = tmp
+        imgs.append(Image.fromarray(new.copy()))
+
+    with bytesio_seek_0() as ret:
+        imgs[0].save(ret, format="gif", duration=1, loop=0, save_all=True, append_images=imgs[1:])
 
     return ret
 
