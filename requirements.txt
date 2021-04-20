@@ -4,7 +4,7 @@ aioredis==1.2.0
 async-cse==0.2.8
 git+https://github.com/PendragonLore/async_pokepy
 async-timeout==3.0.1
-asyncpg==0.18.3
+asyncpg==0.21.0
 attrs==19.1.0
 cffi==1.12.3
 chardet==3.0.4
